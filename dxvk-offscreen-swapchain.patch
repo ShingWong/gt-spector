@@ -1,0 +1,601 @@
+diff --git a/src/dxgi/dxgi_output.cpp b/src/dxgi/dxgi_output.cpp
+index 56cc5ff..9838980 100644
+--- a/src/dxgi/dxgi_output.cpp
++++ b/src/dxgi/dxgi_output.cpp
+@@ -330,8 +330,8 @@ namespace dxvk {
+         if (a.Height < b.Height) return true;
+         if (a.Height > b.Height) return false;
+         
+-        return (a.RefreshRate.Numerator / a.RefreshRate.Denominator)
+-             < (b.RefreshRate.Numerator / b.RefreshRate.Denominator);
++        return (a.RefreshRate.Denominator ? (a.RefreshRate.Numerator / a.RefreshRate.Denominator) : 60)
++             < (b.RefreshRate.Denominator ? (b.RefreshRate.Numerator / b.RefreshRate.Denominator) : 60);
+       });
+     
+     // If requested, write out the first set of display
+diff --git a/src/dxgi/dxgi_swapchain.cpp b/src/dxgi/dxgi_swapchain.cpp
+index d329af3..f384afa 100644
+--- a/src/dxgi/dxgi_swapchain.cpp
++++ b/src/dxgi/dxgi_swapchain.cpp
+@@ -834,8 +834,9 @@ namespace dxvk {
+       ReleaseMonitorData();
+     }
+ 
+-    m_frameRateRefresh = double(selectedMode.RefreshRate.Numerator)
+-                       / double(selectedMode.RefreshRate.Denominator);
++    m_frameRateRefresh = (selectedMode.RefreshRate.Denominator && selectedMode.RefreshRate.Numerator)
++                       ? double(selectedMode.RefreshRate.Numerator) / double(selectedMode.RefreshRate.Denominator)
++                       : 60.0;
+     return S_OK;
+   }
+   
+diff --git a/src/dxvk/dxvk_presenter.cpp b/src/dxvk/dxvk_presenter.cpp
+index 27d6bb1..016629e 100644
+--- a/src/dxvk/dxvk_presenter.cpp
++++ b/src/dxvk/dxvk_presenter.cpp
+@@ -5,8 +5,17 @@
+ 
+ #include "../wsi/wsi_window.h"
+ 
++#include <cstdio>
++#include <cstring>
++
+ namespace dxvk {
+ 
++  struct PresenterShmHeader {
++    uint64_t frameCounter;
++    uint32_t width;
++    uint32_t height;
++  };
++
+   Presenter::Presenter(
+     const Rc<DxvkDevice>&   device,
+     const Rc<sync::Signal>& signal,
+@@ -58,6 +67,12 @@ namespace dxvk {
+     PresenterSync& semaphores = m_semaphores.at(m_frameIndex);
+     sync = semaphores;
+ 
++    if (m_offscreen) {
++      m_imageIndex = m_frameIndex % m_info.imageCount;
++      index = m_imageIndex;
++      return VK_SUCCESS;
++    }
++
+     // Don't acquire more than one image at a time
+     if (m_acquireStatus == VK_NOT_READY) {
+       waitForSwapchainFence(semaphores);
+@@ -80,6 +95,110 @@ namespace dxvk {
+           uint64_t          frameId) {
+     PresenterSync& currSync = m_semaphores.at(m_frameIndex);
+ 
++    if (m_offscreen) {
++      // Queue-ordered copy readback
++      if (m_offscreenCmdPool && m_offscreenReadbackFence.size() > m_imageIndex
++          && m_offscreenReadbackFence[m_imageIndex] != VK_NULL_HANDLE
++          && m_offscreenShmFile) {
++        // Wait for previous readback on this image to complete
++        m_vkd->vkWaitForFences(m_vkd->device(), 1,
++            &m_offscreenReadbackFence[m_imageIndex], VK_TRUE, UINT64_MAX);
++        m_vkd->vkResetFences(m_vkd->device(), 1,
++            &m_offscreenReadbackFence[m_imageIndex]);
++
++        // Read back from staging buffer
++        void* mapped = nullptr;
++        if (m_vkd->vkMapMemory(m_vkd->device(),
++            m_offscreenStagingMem[m_imageIndex], 0, VK_WHOLE_SIZE,
++            0, &mapped) == VK_SUCCESS) {
++          VkDeviceSize frameSize = VkDeviceSize(m_info.imageExtent.width)
++                                 * VkDeviceSize(m_info.imageExtent.height) * 4;
++          // Write header: frame_counter, width, height
++          PresenterShmHeader header;
++          header.frameCounter = m_offscreenFrameCount++;
++          header.width = m_info.imageExtent.width;
++          header.height = m_info.imageExtent.height;
++          // Write to frame dump file
++          fseek(m_offscreenShmFile, 0, SEEK_SET);
++          fwrite(&header, sizeof(header), 1, m_offscreenShmFile);
++          fwrite(mapped, 1, static_cast<size_t>(frameSize), m_offscreenShmFile);
++          fflush(m_offscreenShmFile);
++          m_vkd->vkUnmapMemory(m_vkd->device(),
++              m_offscreenStagingMem[m_imageIndex]);
++        }
++
++        // Submit copy command buffer (queue-ordered, no waits)
++        VkCommandBufferAllocateInfo allocInfo = {
++            VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
++        allocInfo.commandPool        = m_offscreenCmdPool;
++        allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
++        allocInfo.commandBufferCount = 1;
++
++        VkCommandBuffer cmdBuf;
++        if (m_vkd->vkAllocateCommandBuffers(m_vkd->device(),
++            &allocInfo, &cmdBuf) == VK_SUCCESS) {
++          VkCommandBufferBeginInfo beginInfo = {
++              VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
++          beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
++
++          if (m_vkd->vkBeginCommandBuffer(cmdBuf, &beginInfo) == VK_SUCCESS) {
++            // Barrier: COLOR_ATTACHMENT_OPTIMAL -> TRANSFER_SRC_OPTIMAL
++            VkImageMemoryBarrier toTransfer = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
++            toTransfer.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
++            toTransfer.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
++            toTransfer.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
++            toTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
++            toTransfer.image = m_images[m_imageIndex].image;
++            toTransfer.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
++            toTransfer.subresourceRange.levelCount = 1;
++            toTransfer.subresourceRange.layerCount = 1;
++
++            m_vkd->vkCmdPipelineBarrier(cmdBuf,
++                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
++                VK_PIPELINE_STAGE_TRANSFER_BIT,
++                0, 0, nullptr, 0, nullptr, 1, &toTransfer);
++
++            VkBufferImageCopy region = {};
++            region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
++            region.imageSubresource.layerCount = 1;
++            region.imageExtent.width  = m_info.imageExtent.width;
++            region.imageExtent.height = m_info.imageExtent.height;
++            region.imageExtent.depth  = 1;
++
++            m_vkd->vkCmdCopyImageToBuffer(cmdBuf,
++                m_images[m_imageIndex].image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
++                m_offscreenStagingBuf[m_imageIndex], 1, &region);
++
++            // Barrier: TRANSFER_SRC_OPTIMAL -> COLOR_ATTACHMENT_OPTIMAL
++            VkImageMemoryBarrier toColor = toTransfer;
++            toColor.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
++            toColor.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
++            toColor.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
++            toColor.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
++
++            m_vkd->vkCmdPipelineBarrier(cmdBuf,
++                VK_PIPELINE_STAGE_TRANSFER_BIT,
++                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
++                0, 0, nullptr, 0, nullptr, 1, &toColor);
++            m_vkd->vkEndCommandBuffer(cmdBuf);
++
++            VkSubmitInfo submit = { VK_STRUCTURE_TYPE_SUBMIT_INFO };
++            submit.commandBufferCount = 1;
++            submit.pCommandBuffers = &cmdBuf;
++
++            m_vkd->vkQueueSubmit(m_device->queues().graphics.queueHandle,
++                1, &submit, m_offscreenReadbackFence[m_imageIndex]);
++          }
++          m_vkd->vkFreeCommandBuffers(m_vkd->device(),
++              m_offscreenCmdPool, 1, &cmdBuf);
++        }
++      }
++
++      m_frameIndex += 1;
++      m_frameIndex %= m_semaphores.size();
++      return VK_SUCCESS;
++    }
++
+     VkPresentIdKHR presentId = { VK_STRUCTURE_TYPE_PRESENT_ID_KHR };
+     presentId.swapchainCount = 1;
+     presentId.pPresentIds   = &frameId;
+@@ -177,6 +296,143 @@ namespace dxvk {
+     if (!m_surface)
+       return VK_ERROR_SURFACE_LOST_KHR;
+ 
++    m_offscreen = reinterpret_cast<uintptr_t>(m_surface) < 0x10000;
++
++    if (m_offscreen) {
++      Logger::info("Presenter: Using offscreen swap chain mode (no WSI)");
++
++      m_info.imageExtent = desc.imageExtent;
++      m_info.format      = desc.formats[0];
++      m_info.presentMode = VK_PRESENT_MODE_FIFO_KHR;
++      m_info.imageCount  = std::min(desc.imageCount, 4u);
++
++      if (!m_info.imageExtent.width || !m_info.imageExtent.height) {
++        m_info.imageCount = 0;
++        m_info.format     = { VK_FORMAT_UNDEFINED, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR };
++        return VK_SUCCESS;
++      }
++
++      VkResult status;
++
++      m_images.resize(m_info.imageCount);
++
++      for (uint32_t i = 0; i < m_info.imageCount; i++) {
++        VkImageCreateInfo imgInfo = { VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
++        imgInfo.imageType     = VK_IMAGE_TYPE_2D;
++        imgInfo.format        = m_info.format.format;
++        imgInfo.extent.width  = m_info.imageExtent.width;
++        imgInfo.extent.height = m_info.imageExtent.height;
++        imgInfo.extent.depth  = 1;
++        imgInfo.mipLevels     = 1;
++        imgInfo.arrayLayers   = 1;
++        imgInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
++        imgInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
++        imgInfo.usage         = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
++        imgInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
++        imgInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
++
++        if ((status = m_vkd->vkCreateImage(m_vkd->device(), &imgInfo, nullptr, &m_images[i].image)))
++          return status;
++
++        VkMemoryRequirements memReq;
++        m_vkd->vkGetImageMemoryRequirements(m_vkd->device(), m_images[i].image, &memReq);
++
++        VkMemoryAllocateInfo allocInfo = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
++        allocInfo.allocationSize  = memReq.size;
++        allocInfo.memoryTypeIndex = 0;
++
++        VkPhysicalDeviceMemoryProperties memProps;
++        m_vki->vkGetPhysicalDeviceMemoryProperties(m_device->adapter()->handle(), &memProps);
++
++        for (uint32_t j = 0; j < memProps.memoryTypeCount; j++) {
++          if ((memReq.memoryTypeBits & (1u << j)) &&
++              (memProps.memoryTypes[j].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
++            allocInfo.memoryTypeIndex = j;
++            break;
++          }
++        }
++
++        VkDeviceMemory mem;
++        if ((status = m_vkd->vkAllocateMemory(m_vkd->device(), &allocInfo, nullptr, &mem)))
++          return status;
++
++        if ((status = m_vkd->vkBindImageMemory(m_vkd->device(), m_images[i].image, mem, 0)))
++          return status;
++
++        m_images[i].view = VK_NULL_HANDLE;
++        m_offscreenMemory.push_back(mem);
++      }
++
++      for (uint32_t i = 0; i < m_info.imageCount; i++) {
++        VkImageViewCreateInfo viewInfo = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
++        viewInfo.image    = m_images[i].image;
++        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
++        viewInfo.format   = m_info.format.format;
++        viewInfo.components = VkComponentMapping {
++          VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
++          VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY };
++        viewInfo.subresourceRange = {
++          VK_IMAGE_ASPECT_COLOR_BIT,
++          0, 1, 0, 1 };
++
++        if ((status = m_vkd->vkCreateImageView(m_vkd->device(),
++            &viewInfo, nullptr, &m_images[i].view)))
++          return status;
++      }
++
++      // Use a single semaphore per pair (shared acquire+present)
++      // Each frame: game waits on sem (consumed), then signals sem (re-signaled)
++      // Pre-signal each sem once; presentImage is no-op
++      uint32_t semaphoreCount = m_info.imageCount * 2u;
++      m_semaphores.resize(semaphoreCount);
++
++      for (uint32_t i = 0; i < semaphoreCount; i++) {
++        VkSemaphoreCreateInfo semInfo = { VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
++
++        if ((status = m_vkd->vkCreateSemaphore(m_vkd->device(),
++            &semInfo, nullptr, &m_semaphores[i].acquire)))
++          return status;
++
++        m_semaphores[i].present = m_semaphores[i].acquire;
++
++        VkFenceCreateInfo fenceInfo = { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, nullptr, VK_FENCE_CREATE_SIGNALED_BIT };
++        if ((status = m_vkd->vkCreateFence(m_vkd->device(),
++            &fenceInfo, nullptr, &m_semaphores[i].fence)))
++          return status;
++
++        m_semaphores[i].fenceSignaled = VK_TRUE;
++      }
++
++      VkQueue queue = m_device->queues().graphics.queueHandle;
++
++      for (uint32_t i = 0; i < semaphoreCount; i++) {
++        VkSubmitInfo preSignalInfo = { VK_STRUCTURE_TYPE_SUBMIT_INFO };
++        preSignalInfo.signalSemaphoreCount = 1;
++        preSignalInfo.pSignalSemaphores    = &m_semaphores[i].acquire;
++
++        if ((status = m_vkd->vkQueueSubmit(queue, 1, &preSignalInfo, VK_NULL_HANDLE))) {
++          Logger::err(str::format("Presenter: Failed to pre-signal offscreen semaphore: ", status));
++          return status;
++        }
++      }
++
++      if ((status = createOffscreenReadback()))
++        return status;
++
++      m_imageIndex = 0;
++      m_frameIndex = 0;
++      m_acquireStatus = VK_NOT_READY;
++      m_dynamicModes.clear();
++
++      Logger::info(str::format(
++        "Presenter: Offscreen swap chain properties:"
++        "\n  Format:       ", m_info.format.format,
++        "\n  Buffer size:  ", m_info.imageExtent.width, "x", m_info.imageExtent.height,
++        "\n  Image count:  ", m_info.imageCount));
++
++      return VK_SUCCESS;
++    }
++
+     VkSurfaceFullScreenExclusiveInfoEXT fullScreenExclusiveInfo = { VK_STRUCTURE_TYPE_SURFACE_FULL_SCREEN_EXCLUSIVE_INFO_EXT };
+     fullScreenExclusiveInfo.fullScreenExclusive = m_fullscreenMode;
+ 
+@@ -419,6 +675,9 @@ namespace dxvk {
+     if (!m_surface)
+       return false;
+ 
++    if (m_offscreen)
++      return colorspace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
++
+     std::vector<VkSurfaceFormatKHR> surfaceFormats;
+     getSupportedFormats(surfaceFormats);
+ 
+@@ -653,6 +912,105 @@ namespace dxvk {
+   }
+ 
+ 
++  VkResult Presenter::createOffscreenReadback() {
++    VkCommandPoolCreateInfo poolInfo = { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
++    poolInfo.queueFamilyIndex = m_device->queues().graphics.queueFamily;
++    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
++    VkResult status = m_vkd->vkCreateCommandPool(
++        m_vkd->device(), &poolInfo, nullptr, &m_offscreenCmdPool);
++    if (status) return status;
++
++    uint32_t count = m_info.imageCount;
++    m_offscreenStagingBuf.resize(count, VK_NULL_HANDLE);
++    m_offscreenStagingMem.resize(count, VK_NULL_HANDLE);
++    m_offscreenReadbackFence.resize(count, VK_NULL_HANDLE);
++
++    VkDeviceSize stagingSize = VkDeviceSize(m_info.imageExtent.width)
++                             * VkDeviceSize(m_info.imageExtent.height) * 4;
++
++    for (uint32_t i = 0; i < count; i++) {
++      VkBufferCreateInfo bufInfo = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
++      bufInfo.size = stagingSize;
++      bufInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
++      bufInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
++      status = m_vkd->vkCreateBuffer(m_vkd->device(), &bufInfo, nullptr,
++          &m_offscreenStagingBuf[i]);
++      if (status) { destroyOffscreenReadback(); return status; }
++
++      VkMemoryRequirements memReq;
++      m_vkd->vkGetBufferMemoryRequirements(m_vkd->device(),
++          m_offscreenStagingBuf[i], &memReq);
++
++      VkMemoryAllocateInfo allocInfo = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
++      allocInfo.allocationSize = memReq.size;
++      allocInfo.memoryTypeIndex = 0;
++
++      VkPhysicalDeviceMemoryProperties memProps;
++      m_vki->vkGetPhysicalDeviceMemoryProperties(m_device->adapter()->handle(), &memProps);
++
++      for (uint32_t j = 0; j < memProps.memoryTypeCount; j++) {
++        if ((memReq.memoryTypeBits & (1u << j)) &&
++            (memProps.memoryTypes[j].propertyFlags & (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
++                | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))) {
++          allocInfo.memoryTypeIndex = j;
++          break;
++        }
++      }
++
++      status = m_vkd->vkAllocateMemory(m_vkd->device(), &allocInfo, nullptr,
++          &m_offscreenStagingMem[i]);
++      if (status) { destroyOffscreenReadback(); return status; }
++
++      status = m_vkd->vkBindBufferMemory(m_vkd->device(),
++          m_offscreenStagingBuf[i], m_offscreenStagingMem[i], 0);
++      if (status) { destroyOffscreenReadback(); return status; }
++
++      VkFenceCreateInfo fenceInfo = { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
++      fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
++      status = m_vkd->vkCreateFence(m_vkd->device(), &fenceInfo, nullptr,
++          &m_offscreenReadbackFence[i]);
++      if (status) { destroyOffscreenReadback(); return status; }
++    }
++    // Frame dump file (accessible from Linux via Wine's Z: drive)
++    char shmPath[128];
++    const char* shmId = getenv("GT_SPECTOR_SHM_ID");
++    if (!shmId) shmId = "0";
++    snprintf(shmPath, sizeof(shmPath), "Z:\\dev\\shm\\gt-spector-%s-frame", shmId);
++    VkDeviceSize shmSize = stagingSize + sizeof(PresenterShmHeader);
++    m_offscreenShmFile = fopen(shmPath, "wb");
++    if (m_offscreenShmFile) {
++      fseek(m_offscreenShmFile, static_cast<long>(shmSize - 1), SEEK_SET);
++      fputc(0, m_offscreenShmFile);
++      rewind(m_offscreenShmFile);
++      fflush(m_offscreenShmFile);
++      m_offscreenShmPtr = m_offscreenShmFile;
++      m_offscreenShmSize = shmSize;
++    }
++    return VK_SUCCESS;
++  }
++
++
++  void Presenter::destroyOffscreenReadback() {
++    for (auto& fence : m_offscreenReadbackFence)
++      if (fence) m_vkd->vkDestroyFence(m_vkd->device(), fence, nullptr);
++    m_offscreenReadbackFence.clear();
++    for (auto& mem : m_offscreenStagingMem)
++      if (mem) m_vkd->vkFreeMemory(m_vkd->device(), mem, nullptr);
++    m_offscreenStagingMem.clear();
++    for (auto& buf : m_offscreenStagingBuf)
++      if (buf) m_vkd->vkDestroyBuffer(m_vkd->device(), buf, nullptr);
++    m_offscreenStagingBuf.clear();
++    if (m_offscreenCmdPool)
++      m_vkd->vkDestroyCommandPool(m_vkd->device(), m_offscreenCmdPool, nullptr);
++    m_offscreenCmdPool = VK_NULL_HANDLE;
++
++    if (m_offscreenShmFile)
++      fclose(m_offscreenShmFile);
++    m_offscreenShmFile = nullptr;
++    m_offscreenShmPtr = nullptr;
++  }
++
++
+   void Presenter::destroySwapchain() {
+     if (m_signal != nullptr)
+       m_signal->wait(m_lastFrameId.load(std::memory_order_acquire));
+@@ -665,24 +1023,37 @@ namespace dxvk {
+     
+     for (const auto& sem : m_semaphores) {
+       m_vkd->vkDestroySemaphore(m_vkd->device(), sem.acquire, nullptr);
+-      m_vkd->vkDestroySemaphore(m_vkd->device(), sem.present, nullptr);
++      if (sem.present != sem.acquire)
++        m_vkd->vkDestroySemaphore(m_vkd->device(), sem.present, nullptr);
+       m_vkd->vkDestroyFence(m_vkd->device(), sem.fence, nullptr);
+     }
+ 
+-    m_vkd->vkDestroySwapchainKHR(m_vkd->device(), m_swapchain, nullptr);
++    if (m_offscreen) {
++      for (const auto& img : m_images)
++        m_vkd->vkDestroyImage(m_vkd->device(), img.image, nullptr);
++      for (const auto& mem : m_offscreenMemory)
++        m_vkd->vkFreeMemory(m_vkd->device(), mem, nullptr);
++      m_offscreenMemory.clear();
++      destroyOffscreenReadback();
++    } else {
++      m_vkd->vkDestroySwapchainKHR(m_vkd->device(), m_swapchain, nullptr);
++    }
+ 
+     m_images.clear();
+     m_semaphores.clear();
+     m_dynamicModes.clear();
+ 
+     m_swapchain = VK_NULL_HANDLE;
++    m_offscreen = false;
+   }
+ 
+ 
+   void Presenter::destroySurface() {
+-    m_vki->vkDestroySurfaceKHR(m_vki->instance(), m_surface, nullptr);
++    if (!m_offscreen)
++      m_vki->vkDestroySurfaceKHR(m_vki->instance(), m_surface, nullptr);
+ 
+     m_surface = VK_NULL_HANDLE;
++    m_offscreen = false;
+   }
+ 
+ 
+@@ -723,15 +1094,14 @@ namespace dxvk {
+       if (!frame.frameId)
+         return;
+ 
+-      // If the present operation has succeeded, actually wait for it to complete.
+-      // Don't bother with it on MAILBOX / IMMEDIATE modes since doing so would
+-      // restrict us to the display refresh rate on some platforms (XWayland).
+       if (frame.result >= 0 && (frame.mode == VK_PRESENT_MODE_FIFO_KHR || frame.mode == VK_PRESENT_MODE_FIFO_RELAXED_KHR)) {
+-        VkResult vr = m_vkd->vkWaitForPresentKHR(m_vkd->device(),
+-          m_swapchain, frame.frameId, std::numeric_limits<uint64_t>::max());
++        if (m_swapchain) {
++          VkResult vr = m_vkd->vkWaitForPresentKHR(m_vkd->device(),
++            m_swapchain, frame.frameId, std::numeric_limits<uint64_t>::max());
+ 
+-        if (vr < 0 && vr != VK_ERROR_OUT_OF_DATE_KHR && vr != VK_ERROR_SURFACE_LOST_KHR)
+-          Logger::err(str::format("Presenter: vkWaitForPresentKHR failed: ", vr));
++          if (vr < 0 && vr != VK_ERROR_OUT_OF_DATE_KHR && vr != VK_ERROR_SURFACE_LOST_KHR)
++            Logger::err(str::format("Presenter: vkWaitForPresentKHR failed: ", vr));
++        }
+       }
+ 
+       // Apply FPS limtier here to align it as closely with scanout as we can,
+diff --git a/src/dxvk/dxvk_presenter.h b/src/dxvk/dxvk_presenter.h
+index 1cbf7ed..d2e2712 100644
+--- a/src/dxvk/dxvk_presenter.h
++++ b/src/dxvk/dxvk_presenter.h
+@@ -207,7 +207,7 @@ namespace dxvk {
+      * \returns \c true if the presenter has a swap chain.
+      */
+     bool hasSwapChain() const {
+-      return m_swapchain;
++      return m_swapchain || m_offscreen;
+     }
+ 
+     /**
+@@ -238,6 +238,8 @@ namespace dxvk {
+     VkSurfaceKHR      m_surface     = VK_NULL_HANDLE;
+     VkSwapchainKHR    m_swapchain   = VK_NULL_HANDLE;
+ 
++    bool              m_offscreen   = false;
++
+     VkFullScreenExclusiveEXT m_fullscreenMode = VK_FULL_SCREEN_EXCLUSIVE_DISALLOWED_EXT;
+ 
+     std::vector<PresenterImage> m_images;
+@@ -245,6 +247,18 @@ namespace dxvk {
+ 
+     std::vector<VkPresentModeKHR> m_dynamicModes;
+ 
++    std::vector<VkDeviceMemory>   m_offscreenMemory;
++
++    VkCommandPool                 m_offscreenCmdPool    = VK_NULL_HANDLE;
++    std::vector<VkBuffer>         m_offscreenStagingBuf;
++    std::vector<VkDeviceMemory>   m_offscreenStagingMem;
++    std::vector<VkFence>          m_offscreenReadbackFence;
++
++    FILE*                         m_offscreenShmFile    = nullptr;
++    void*                         m_offscreenShmPtr     = nullptr;
++    VkDeviceSize                  m_offscreenShmSize    = 0;
++    uint64_t                      m_offscreenFrameCount = 0;
++
+     uint32_t          m_imageIndex = 0;
+     uint32_t          m_frameIndex = 0;
+ 
+@@ -293,6 +307,9 @@ namespace dxvk {
+ 
+     void destroySwapchain();
+ 
++    VkResult createOffscreenReadback();
++    void     destroyOffscreenReadback();
++
+     void destroySurface();
+ 
+     void waitForSwapchainFence(
+diff --git a/src/util/util_misc.h b/src/util/util_misc.h
+index 12ee999..55243f9 100644
+--- a/src/util/util_misc.h
++++ b/src/util/util_misc.h
+@@ -20,6 +20,8 @@ namespace dxvk {
+    * \returns Refresh period, in nanoseconds
+    */
+   inline auto computeRefreshPeriod(uint64_t numerator, uint64_t denominator) {
++    if (!numerator || !denominator)
++      return std::chrono::nanoseconds(16666666); // Default to 60Hz
+     using unit = std::chrono::nanoseconds;
+     unit::rep ns = unit::rep(unit::period::den * denominator)
+                  / unit::rep(unit::period::num * numerator);
+diff --git a/src/wsi/meson.build b/src/wsi/meson.build
+index d72c221..142b0a3 100644
+--- a/src/wsi/meson.build
++++ b/src/wsi/meson.build
+@@ -13,6 +13,7 @@ wsi_src = [
+   'glfw/wsi_monitor_glfw.cpp',
+   'glfw/wsi_platform_glfw.cpp',
+   'glfw/wsi_window_glfw.cpp',
++  'none/wsi_platform_none.cpp',
+ ]
+ 
+ wsi_deps = [ dep_displayinfo ]
+diff --git a/src/wsi/wsi_platform.cpp b/src/wsi/wsi_platform.cpp
+index c6f12bd..2b4fb07 100644
+--- a/src/wsi/wsi_platform.cpp
++++ b/src/wsi/wsi_platform.cpp
+@@ -21,6 +21,7 @@ namespace dxvk::wsi {
+ #if defined(DXVK_WSI_GLFW)
+     &GlfwWSI,
+ #endif
++    &NoneWSI,
+   };
+ 
+   void init() {
+diff --git a/src/wsi/wsi_platform.h b/src/wsi/wsi_platform.h
+index 80dd8c5..c0e166a 100644
+--- a/src/wsi/wsi_platform.h
++++ b/src/wsi/wsi_platform.h
+@@ -115,6 +115,8 @@ namespace dxvk::wsi {
+   extern WsiBootstrap GlfwWSI;
+ #endif
+ 
++  extern WsiBootstrap NoneWSI;
++
+   void init();
+   void quit();
+   std::vector<const char *> getInstanceExtensions();
