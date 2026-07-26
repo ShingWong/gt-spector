@@ -22,12 +22,18 @@ class Input:
             cy = int(parts[1].split(":")[1])
             dx = x - cx
             dy = y - cy
-        except (OSError, ValueError):
+        except (OSError, ValueError, IndexError):
             pass
-        subprocess.run(
-            ["xdotool", "mousemove", "--sync", str(x), str(y)],
-            env=self._env, timeout=10, check=False
-        )
+        try:
+            subprocess.run(
+                ["xdotool", "mousemove", "--sync", str(x), str(y)],
+                env=self._env, timeout=3, check=False
+            )
+        except subprocess.TimeoutExpired:
+            subprocess.run(
+                ["xdotool", "mousemove", str(x), str(y)],
+                env=self._env, timeout=3, check=False
+            )
         distance = math.sqrt(dx * dx + dy * dy)
         if distance > 0 and speed > 0:
             time.sleep(distance / speed)
@@ -37,15 +43,27 @@ class Input:
         subprocess.run(["xdotool", "click", "1"], env=self._env, timeout=5, check=False)
 
     def drag(self, x1: int, y1: int, x2: int, y2: int, speed: float = 400) -> None:
-        subprocess.run(
-            ["xdotool", "mousemove", "--sync", str(x1), str(y1)],
-            env=self._env, timeout=10, check=False
-        )
+        try:
+            subprocess.run(
+                ["xdotool", "mousemove", "--sync", str(x1), str(y1)],
+                env=self._env, timeout=3, check=False
+            )
+        except subprocess.TimeoutExpired:
+            subprocess.run(
+                ["xdotool", "mousemove", str(x1), str(y1)],
+                env=self._env, timeout=3, check=False
+            )
         subprocess.run(["xdotool", "mousedown", "1"], env=self._env, timeout=5, check=False)
-        subprocess.run(
-            ["xdotool", "mousemove", "--sync", str(x2), str(y2)],
-            env=self._env, timeout=10, check=False
-        )
+        try:
+            subprocess.run(
+                ["xdotool", "mousemove", "--sync", str(x2), str(y2)],
+                env=self._env, timeout=3, check=False
+            )
+        except subprocess.TimeoutExpired:
+            subprocess.run(
+                ["xdotool", "mousemove", str(x2), str(y2)],
+                env=self._env, timeout=3, check=False
+            )
         dx = x2 - x1
         dy = y2 - y1
         distance = math.sqrt(dx * dx + dy * dy)
