@@ -60,7 +60,7 @@ class ViewerWindow:
             max_size = 800
             scale = min(max_size / w, max_size / h, 1.0)
             nw, nh = int(w * scale), int(h * scale)
-            img = Image.fromarray(frame).resize((nw, nh), Image.NEAREST)
+            img = Image.fromarray(frame).resize((nw, nh), Image.Resampling.NEAREST)
             self._tk_photo = ImageTk.PhotoImage(img)
             self._canvas_label.config(image=self._tk_photo)
             self._img_w, self._img_h = nw, nh

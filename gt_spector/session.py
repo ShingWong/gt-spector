@@ -1,5 +1,8 @@
-from .source import parse_source, SourceKind
+import numpy as np
+
 from .screen import Screen
+from .source import SourceKind, parse_source
+
 
 class Session:
     def __init__(self, display: str, source: str = "file:///tmp/test-frame.png", fps: int = 5):
@@ -12,10 +15,10 @@ class Session:
             raise NotImplementedError(f"Source kind {spec.kind} not implemented")
 
     @property
-    def frame(self):
+    def frame(self) -> np.ndarray:
         return self._screen.frame
 
-    def refresh(self):
+    def refresh(self) -> np.ndarray:
         return self._screen.refresh()
 
     def get_pixel(self, x: int, y: int) -> tuple[int, int, int]:

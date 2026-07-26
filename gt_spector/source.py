@@ -2,6 +2,7 @@ import enum
 import re
 from dataclasses import dataclass
 
+
 class SourceKind(enum.Enum):
     FILE = "file"
     SHM = "shm"

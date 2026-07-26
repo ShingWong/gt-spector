@@ -1,14 +1,15 @@
 import numpy as np
 from PIL import Image
 
+
 class Screen:
     def __init__(self, source_path: str):
         self._source_path = source_path
         self._frame: np.ndarray | None = None
 
     def refresh(self) -> np.ndarray:
-        img = Image.open(self._source_path)
-        self._frame = np.asarray(img.convert("RGB"))
+        with Image.open(self._source_path) as img:
+            self._frame = np.asarray(img.convert("RGB"))
         return self._frame
 
     @property
