@@ -30,24 +30,28 @@ index d329af3..f384afa 100644
    }
    
 diff --git a/src/dxvk/dxvk_presenter.cpp b/src/dxvk/dxvk_presenter.cpp
-index 27d6bb1..9926d5c 100644
+index 27d6bb1..016629e 100644
 --- a/src/dxvk/dxvk_presenter.cpp
 +++ b/src/dxvk/dxvk_presenter.cpp
-@@ -5,6 +5,13 @@
+@@ -5,8 +5,17 @@
  
  #include "../wsi/wsi_window.h"
  
-+#ifndef _WIN32
-+#include <sys/mman.h>
-+#include <fcntl.h>
-+#include <unistd.h>
-+#endif
++#include <cstdio>
 +#include <cstring>
 +
  namespace dxvk {
  
++  struct PresenterShmHeader {
++    uint64_t frameCounter;
++    uint32_t width;
++    uint32_t height;
++  };
++
    Presenter::Presenter(
-@@ -58,6 +65,12 @@ namespace dxvk {
+     const Rc<DxvkDevice>&   device,
+     const Rc<sync::Signal>& signal,
+@@ -58,6 +67,12 @@ namespace dxvk {
      PresenterSync& semaphores = m_semaphores.at(m_frameIndex);
      sync = semaphores;
  
@@ -60,7 +64,7 @@ index 27d6bb1..9926d5c 100644
      // Don't acquire more than one image at a time
      if (m_acquireStatus == VK_NOT_READY) {
        waitForSwapchainFence(semaphores);
-@@ -80,6 +93,112 @@ namespace dxvk {
+@@ -80,6 +95,110 @@ namespace dxvk {
            uint64_t          frameId) {
      PresenterSync& currSync = m_semaphores.at(m_frameIndex);
  
@@ -68,7 +72,7 @@ index 27d6bb1..9926d5c 100644
 +      // Queue-ordered copy readback
 +      if (m_offscreenCmdPool && m_offscreenReadbackFence.size() > m_imageIndex
 +          && m_offscreenReadbackFence[m_imageIndex] != VK_NULL_HANDLE
-+          && m_offscreenShmPtr) {
++          && m_offscreenShmFile) {
 +        // Wait for previous readback on this image to complete
 +        m_vkd->vkWaitForFences(m_vkd->device(), 1,
 +            &m_offscreenReadbackFence[m_imageIndex], VK_TRUE, UINT64_MAX);
@@ -83,17 +87,15 @@ index 27d6bb1..9926d5c 100644
 +          VkDeviceSize frameSize = VkDeviceSize(m_info.imageExtent.width)
 +                                 * VkDeviceSize(m_info.imageExtent.height) * 4;
 +          // Write header: frame_counter, width, height
-+          struct ShmHeader {
-+            uint64_t frameCounter;
-+            uint32_t width;
-+            uint32_t height;
-+          };
-+          auto* shmHeader = reinterpret_cast<ShmHeader*>(m_offscreenShmPtr);
-+          shmHeader->frameCounter = m_offscreenFrameCount++;
-+          shmHeader->width = m_info.imageExtent.width;
-+          shmHeader->height = m_info.imageExtent.height;
-+          // Copy pixel data
-+          std::memcpy(shmHeader + 1, mapped, frameSize);
++          PresenterShmHeader header;
++          header.frameCounter = m_offscreenFrameCount++;
++          header.width = m_info.imageExtent.width;
++          header.height = m_info.imageExtent.height;
++          // Write to frame dump file
++          fseek(m_offscreenShmFile, 0, SEEK_SET);
++          fwrite(&header, sizeof(header), 1, m_offscreenShmFile);
++          fwrite(mapped, 1, static_cast<size_t>(frameSize), m_offscreenShmFile);
++          fflush(m_offscreenShmFile);
 +          m_vkd->vkUnmapMemory(m_vkd->device(),
 +              m_offscreenStagingMem[m_imageIndex]);
 +        }
@@ -327,7 +329,7 @@ index 27d6bb1..9926d5c 100644
      std::vector<VkSurfaceFormatKHR> surfaceFormats;
      getSupportedFormats(surfaceFormats);
  
-@@ -653,6 +912,108 @@ namespace dxvk {
+@@ -653,6 +912,105 @@ namespace dxvk {
    }
  
  
@@ -390,21 +392,21 @@ index 27d6bb1..9926d5c 100644
 +          &m_offscreenReadbackFence[i]);
 +      if (status) { destroyOffscreenReadback(); return status; }
 +    }
-+#ifndef _WIN32
-+    // SHM
-+    char shmName[64];
++    // Frame dump file (accessible from Linux via Wine's Z: drive)
++    char shmPath[128];
 +    const char* shmId = getenv("GT_SPECTOR_SHM_ID");
 +    if (!shmId) shmId = "0";
-+    snprintf(shmName, sizeof(shmName), "/gt-spector-%s-frame", shmId);
-+    m_offscreenShmFd = shm_open(shmName, O_CREAT | O_RDWR, 0666);
-+    if (m_offscreenShmFd >= 0) {
-+      VkDeviceSize shmSize = stagingSize + sizeof(ShmHeader);
-+      ftruncate(m_offscreenShmFd, shmSize);
-+      m_offscreenShmPtr = mmap(nullptr, shmSize, PROT_READ | PROT_WRITE,
-+          MAP_SHARED, m_offscreenShmFd, 0);
++    snprintf(shmPath, sizeof(shmPath), "Z:\\dev\\shm\\gt-spector-%s-frame", shmId);
++    VkDeviceSize shmSize = stagingSize + sizeof(PresenterShmHeader);
++    m_offscreenShmFile = fopen(shmPath, "wb");
++    if (m_offscreenShmFile) {
++      fseek(m_offscreenShmFile, static_cast<long>(shmSize - 1), SEEK_SET);
++      fputc(0, m_offscreenShmFile);
++      rewind(m_offscreenShmFile);
++      fflush(m_offscreenShmFile);
++      m_offscreenShmPtr = m_offscreenShmFile;
 +      m_offscreenShmSize = shmSize;
 +    }
-+#endif
 +    return VK_SUCCESS;
 +  }
 +
@@ -423,20 +425,17 @@ index 27d6bb1..9926d5c 100644
 +      m_vkd->vkDestroyCommandPool(m_vkd->device(), m_offscreenCmdPool, nullptr);
 +    m_offscreenCmdPool = VK_NULL_HANDLE;
 +
-+#ifndef _WIN32
-+    if (m_offscreenShmPtr && m_offscreenShmPtr != MAP_FAILED)
-+      munmap(m_offscreenShmPtr, m_offscreenShmSize);
-+    if (m_offscreenShmFd >= 0) close(m_offscreenShmFd);
++    if (m_offscreenShmFile)
++      fclose(m_offscreenShmFile);
++    m_offscreenShmFile = nullptr;
 +    m_offscreenShmPtr = nullptr;
-+    m_offscreenShmFd = -1;
-+#endif
 +  }
 +
 +
    void Presenter::destroySwapchain() {
      if (m_signal != nullptr)
        m_signal->wait(m_lastFrameId.load(std::memory_order_acquire));
-@@ -665,24 +1026,37 @@ namespace dxvk {
+@@ -665,24 +1023,37 @@ namespace dxvk {
      
      for (const auto& sem : m_semaphores) {
        m_vkd->vkDestroySemaphore(m_vkd->device(), sem.acquire, nullptr);
@@ -477,7 +476,7 @@ index 27d6bb1..9926d5c 100644
    }
  
  
-@@ -723,15 +1097,14 @@ namespace dxvk {
+@@ -723,15 +1094,14 @@ namespace dxvk {
        if (!frame.frameId)
          return;
  
@@ -500,7 +499,7 @@ index 27d6bb1..9926d5c 100644
  
        // Apply FPS limtier here to align it as closely with scanout as we can,
 diff --git a/src/dxvk/dxvk_presenter.h b/src/dxvk/dxvk_presenter.h
-index 1cbf7ed..51bbaca 100644
+index 1cbf7ed..d2e2712 100644
 --- a/src/dxvk/dxvk_presenter.h
 +++ b/src/dxvk/dxvk_presenter.h
 @@ -207,7 +207,7 @@ namespace dxvk {
@@ -532,7 +531,7 @@ index 1cbf7ed..51bbaca 100644
 +    std::vector<VkDeviceMemory>   m_offscreenStagingMem;
 +    std::vector<VkFence>          m_offscreenReadbackFence;
 +
-+    int                           m_offscreenShmFd     = -1;
++    FILE*                         m_offscreenShmFile    = nullptr;
 +    void*                         m_offscreenShmPtr     = nullptr;
 +    VkDeviceSize                  m_offscreenShmSize    = 0;
 +    uint64_t                      m_offscreenFrameCount = 0;
