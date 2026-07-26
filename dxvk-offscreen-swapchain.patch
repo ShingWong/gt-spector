@@ -30,7 +30,7 @@ index d329af3..f384afa 100644
    }
    
 diff --git a/src/dxvk/dxvk_presenter.cpp b/src/dxvk/dxvk_presenter.cpp
-index 27d6bb1..5efc2f8 100644
+index 27d6bb1..7a97f96 100644
 --- a/src/dxvk/dxvk_presenter.cpp
 +++ b/src/dxvk/dxvk_presenter.cpp
 @@ -5,6 +5,13 @@
@@ -60,7 +60,7 @@ index 27d6bb1..5efc2f8 100644
      // Don't acquire more than one image at a time
      if (m_acquireStatus == VK_NOT_READY) {
        waitForSwapchainFence(semaphores);
-@@ -80,6 +93,79 @@ namespace dxvk {
+@@ -80,6 +93,113 @@ namespace dxvk {
            uint64_t          frameId) {
      PresenterSync& currSync = m_semaphores.at(m_frameIndex);
  
@@ -83,12 +83,18 @@ index 27d6bb1..5efc2f8 100644
 +          VkDeviceSize frameSize = VkDeviceSize(m_info.imageExtent.width)
 +                                 * VkDeviceSize(m_info.imageExtent.height) * 4;
 +          // Write header: frame_counter, width, height
-+          auto* header = reinterpret_cast<uint64_t*>(m_offscreenShmPtr);
-+          header[0] = m_offscreenFrameCount++;
-+          header[1] = m_info.imageExtent.width;
-+          header[2] = m_info.imageExtent.height;
++          struct ShmHeader {
++            uint64_t frameCounter;
++            uint32_t width;
++            uint32_t height;
++            uint32_t _pad;
++          };
++          auto* shmHeader = reinterpret_cast<ShmHeader*>(m_offscreenShmPtr);
++          shmHeader->frameCounter = m_offscreenFrameCount++;
++          shmHeader->width = m_info.imageExtent.width;
++          shmHeader->height = m_info.imageExtent.height;
 +          // Copy pixel data
-+          std::memcpy(header + 4, mapped, frameSize);
++          std::memcpy(shmHeader + 1, mapped, frameSize);
 +          m_vkd->vkUnmapMemory(m_vkd->device(),
 +              m_offscreenStagingMem[m_imageIndex]);
 +        }
@@ -108,6 +114,22 @@ index 27d6bb1..5efc2f8 100644
 +          beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 +
 +          if (m_vkd->vkBeginCommandBuffer(cmdBuf, &beginInfo) == VK_SUCCESS) {
++            // Barrier: COLOR_ATTACHMENT_OPTIMAL -> TRANSFER_SRC_OPTIMAL
++            VkImageMemoryBarrier toTransfer = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
++            toTransfer.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
++            toTransfer.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
++            toTransfer.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
++            toTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
++            toTransfer.image = m_images[m_imageIndex].image;
++            toTransfer.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
++            toTransfer.subresourceRange.levelCount = 1;
++            toTransfer.subresourceRange.layerCount = 1;
++
++            m_vkd->vkCmdPipelineBarrier(cmdBuf,
++                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
++                VK_PIPELINE_STAGE_TRANSFER_BIT,
++                0, 0, nullptr, 0, nullptr, 1, &toTransfer);
++
 +            VkBufferImageCopy region = {};
 +            region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 +            region.imageSubresource.layerCount = 1;
@@ -116,8 +138,20 @@ index 27d6bb1..5efc2f8 100644
 +            region.imageExtent.depth  = 1;
 +
 +            m_vkd->vkCmdCopyImageToBuffer(cmdBuf,
-+                m_images[m_imageIndex].image, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
++                m_images[m_imageIndex].image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 +                m_offscreenStagingBuf[m_imageIndex], 1, &region);
++
++            // Barrier: TRANSFER_SRC_OPTIMAL -> COLOR_ATTACHMENT_OPTIMAL
++            VkImageMemoryBarrier toColor = toTransfer;
++            toColor.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
++            toColor.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
++            toColor.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
++            toColor.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
++
++            m_vkd->vkCmdPipelineBarrier(cmdBuf,
++                VK_PIPELINE_STAGE_TRANSFER_BIT,
++                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
++                0, 0, nullptr, 0, nullptr, 1, &toColor);
 +            m_vkd->vkEndCommandBuffer(cmdBuf);
 +
 +            VkSubmitInfo submit = { VK_STRUCTURE_TYPE_SUBMIT_INFO };
@@ -140,7 +174,7 @@ index 27d6bb1..5efc2f8 100644
      VkPresentIdKHR presentId = { VK_STRUCTURE_TYPE_PRESENT_ID_KHR };
      presentId.swapchainCount = 1;
      presentId.pPresentIds   = &frameId;
-@@ -177,6 +263,143 @@ namespace dxvk {
+@@ -177,6 +297,143 @@ namespace dxvk {
      if (!m_surface)
        return VK_ERROR_SURFACE_LOST_KHR;
  
@@ -284,7 +318,7 @@ index 27d6bb1..5efc2f8 100644
      VkSurfaceFullScreenExclusiveInfoEXT fullScreenExclusiveInfo = { VK_STRUCTURE_TYPE_SURFACE_FULL_SCREEN_EXCLUSIVE_INFO_EXT };
      fullScreenExclusiveInfo.fullScreenExclusive = m_fullscreenMode;
  
-@@ -419,6 +642,9 @@ namespace dxvk {
+@@ -419,6 +676,9 @@ namespace dxvk {
      if (!m_surface)
        return false;
  
@@ -294,7 +328,7 @@ index 27d6bb1..5efc2f8 100644
      std::vector<VkSurfaceFormatKHR> surfaceFormats;
      getSupportedFormats(surfaceFormats);
  
-@@ -653,6 +879,108 @@ namespace dxvk {
+@@ -653,6 +913,108 @@ namespace dxvk {
    }
  
  
@@ -403,7 +437,7 @@ index 27d6bb1..5efc2f8 100644
    void Presenter::destroySwapchain() {
      if (m_signal != nullptr)
        m_signal->wait(m_lastFrameId.load(std::memory_order_acquire));
-@@ -665,24 +993,37 @@ namespace dxvk {
+@@ -665,24 +1027,37 @@ namespace dxvk {
      
      for (const auto& sem : m_semaphores) {
        m_vkd->vkDestroySemaphore(m_vkd->device(), sem.acquire, nullptr);
@@ -444,7 +478,7 @@ index 27d6bb1..5efc2f8 100644
    }
  
  
-@@ -723,15 +1064,14 @@ namespace dxvk {
+@@ -723,15 +1098,14 @@ namespace dxvk {
        if (!frame.frameId)
          return;
  
