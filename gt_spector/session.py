@@ -93,7 +93,7 @@ class Session:
                     data = f.read(16)
                     if len(data) >= 16:
                         counter, w, h = struct.unpack("<QII", data)
-                        shm_id = path.split("-")[-1].replace("-frame", "")
+                        shm_id = path.split("-")[-2]
                         sessions.append({
                             "id": shm_id,
                             "path": path,
