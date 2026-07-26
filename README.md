@@ -29,7 +29,7 @@ Game Instance (DXVK offscreen) → SHM → Session → numpy → agent API / GUI
 ## Repository
 
 ```bash
-git clone https://github.com/<owner>/gt-spector
+git clone git@github.com:ShingWong/gt-spector.git
 cd gt-spector
 ```
 
