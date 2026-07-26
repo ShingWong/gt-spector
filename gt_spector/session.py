@@ -73,6 +73,11 @@ class Session:
         from .input import Input
         self._input = Input(display)
 
+    @property
+    def triggers(self):
+        from .triggers import Triggers
+        return Triggers(self)
+
     def detach(self) -> None:
         self.display = ""
         self._screen = None
