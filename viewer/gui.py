@@ -30,12 +30,10 @@ class ViewerWindow:
     def _setup_toolbar(self):
         toolbar = ttk.Frame(self._tk)
         toolbar.pack(side=tk.TOP, fill=tk.X)
-        ttk.Button(toolbar, text="Capture", command=self._capture).pack(
-            side=tk.LEFT, padx=2
-        )
-        ttk.Button(toolbar, text="Quit", command=self._on_close).pack(
-            side=tk.LEFT, padx=2
-        )
+        ttk.Button(toolbar, text="Attach", command=self._on_attach).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Detach", command=self._on_detach).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Capture", command=self._capture).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Quit", command=self._on_close).pack(side=tk.LEFT, padx=2)
 
     def _setup_canvas(self):
         self._frame = ttk.Frame(self._tk)
@@ -108,6 +106,25 @@ class ViewerWindow:
         img = Image.fromarray(self._session.frame)
         img.save(path)
         self._status.config(text=f"Captured: {path}")
+
+    def _on_attach(self):
+        import tkinter.simpledialog
+        display = tkinter.simpledialog.askstring(
+            "Attach Session", "Display (e.g. :9):", parent=self._tk)
+        if not display:
+            return
+        source = f"shm://{display.lstrip(':')}"
+        try:
+            self._session.attach(display, source)
+            self._tk.title(f"gt-spector — {display}")
+            self._status.config(text=f"Attached: {display}")
+        except Exception as e:
+            self._status.config(text=f"Attach error: {e}")
+
+    def _on_detach(self):
+        self._session.detach()
+        self._tk.title("gt-spector — detached")
+        self._status.config(text="Detached")
 
     def _on_close(self):
         self._running = False
