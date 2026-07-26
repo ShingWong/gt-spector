@@ -11,6 +11,9 @@ class Session:
         spec = parse_source(source)
         if spec.kind == SourceKind.FILE:
             self._screen = Screen(spec.path)
+        elif spec.kind == SourceKind.SHM:
+            from .screen import ShmScreen
+            self._screen = ShmScreen(spec.path)
         else:
             raise NotImplementedError(f"Source kind {spec.kind} not implemented")
 
