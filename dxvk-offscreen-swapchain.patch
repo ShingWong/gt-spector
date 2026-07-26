@@ -30,7 +30,7 @@ index d329af3..f384afa 100644
    }
    
 diff --git a/src/dxvk/dxvk_presenter.cpp b/src/dxvk/dxvk_presenter.cpp
-index 27d6bb1..5a07c73 100644
+index 27d6bb1..5617483 100644
 --- a/src/dxvk/dxvk_presenter.cpp
 +++ b/src/dxvk/dxvk_presenter.cpp
 @@ -58,6 +58,12 @@ namespace dxvk {
@@ -240,7 +240,7 @@ index 27d6bb1..5a07c73 100644
 +      bufInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 +      status = m_vkd->vkCreateBuffer(m_vkd->device(), &bufInfo, nullptr,
 +          &m_offscreenStagingBuf[i]);
-+      if (status) return status;
++      if (status) { destroyOffscreenReadback(); return status; }
 +
 +      VkMemoryRequirements memReq;
 +      m_vkd->vkGetBufferMemoryRequirements(m_vkd->device(),
@@ -264,17 +264,17 @@ index 27d6bb1..5a07c73 100644
 +
 +      status = m_vkd->vkAllocateMemory(m_vkd->device(), &allocInfo, nullptr,
 +          &m_offscreenStagingMem[i]);
-+      if (status) return status;
++      if (status) { destroyOffscreenReadback(); return status; }
 +
 +      status = m_vkd->vkBindBufferMemory(m_vkd->device(),
 +          m_offscreenStagingBuf[i], m_offscreenStagingMem[i], 0);
-+      if (status) return status;
++      if (status) { destroyOffscreenReadback(); return status; }
 +
 +      VkFenceCreateInfo fenceInfo = { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
 +      fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 +      status = m_vkd->vkCreateFence(m_vkd->device(), &fenceInfo, nullptr,
 +          &m_offscreenReadbackFence[i]);
-+      if (status) return status;
++      if (status) { destroyOffscreenReadback(); return status; }
 +    }
 +    return VK_SUCCESS;
 +  }
