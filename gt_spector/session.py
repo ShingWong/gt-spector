@@ -82,3 +82,25 @@ class Session:
         self.display = ""
         self._screen = None
         self._input = None
+
+    @staticmethod
+    def list_sessions() -> list[dict]:
+        import glob, struct
+        sessions = []
+        for path in glob.glob("/dev/shm/gt-spector-*-frame"):
+            try:
+                with open(path, "rb") as f:
+                    data = f.read(16)
+                    if len(data) >= 16:
+                        counter, w, h = struct.unpack("<QII", data)
+                        shm_id = path.split("-")[-1].replace("-frame", "")
+                        sessions.append({
+                            "id": shm_id,
+                            "path": path,
+                            "frame": counter,
+                            "width": w,
+                            "height": h,
+                        })
+            except Exception:
+                pass
+        return sessions

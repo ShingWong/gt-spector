@@ -1,7 +1,21 @@
 import argparse
+import sys
 
 
 def main():
+    from .session import Session
+
+    if "--list-sessions" in sys.argv:
+        sessions = Session.list_sessions()
+        if not sessions:
+            print("No active sessions found")
+        else:
+            print(f"{'ID':<6} {'Frames':<10} {'Size':<12}")
+            print("-" * 30)
+            for s in sessions:
+                print(f"{s['id']:<6} {s['frame']:<10} {s['width']}x{s['height']:<6}")
+        sys.exit(0)
+
     parser = argparse.ArgumentParser(description="gt-spector: game testing inspector")
     parser.add_argument("--session", default=":9", help="DISPLAY target")
     parser.add_argument("--source", default="file:///tmp/test-frame.png", help="Frame source")
