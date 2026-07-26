@@ -30,7 +30,7 @@ index d329af3..f384afa 100644
    }
    
 diff --git a/src/dxvk/dxvk_presenter.cpp b/src/dxvk/dxvk_presenter.cpp
-index 27d6bb1..7a97f96 100644
+index 27d6bb1..9926d5c 100644
 --- a/src/dxvk/dxvk_presenter.cpp
 +++ b/src/dxvk/dxvk_presenter.cpp
 @@ -5,6 +5,13 @@
@@ -60,7 +60,7 @@ index 27d6bb1..7a97f96 100644
      // Don't acquire more than one image at a time
      if (m_acquireStatus == VK_NOT_READY) {
        waitForSwapchainFence(semaphores);
-@@ -80,6 +93,113 @@ namespace dxvk {
+@@ -80,6 +93,112 @@ namespace dxvk {
            uint64_t          frameId) {
      PresenterSync& currSync = m_semaphores.at(m_frameIndex);
  
@@ -87,7 +87,6 @@ index 27d6bb1..7a97f96 100644
 +            uint64_t frameCounter;
 +            uint32_t width;
 +            uint32_t height;
-+            uint32_t _pad;
 +          };
 +          auto* shmHeader = reinterpret_cast<ShmHeader*>(m_offscreenShmPtr);
 +          shmHeader->frameCounter = m_offscreenFrameCount++;
@@ -174,7 +173,7 @@ index 27d6bb1..7a97f96 100644
      VkPresentIdKHR presentId = { VK_STRUCTURE_TYPE_PRESENT_ID_KHR };
      presentId.swapchainCount = 1;
      presentId.pPresentIds   = &frameId;
-@@ -177,6 +297,143 @@ namespace dxvk {
+@@ -177,6 +296,143 @@ namespace dxvk {
      if (!m_surface)
        return VK_ERROR_SURFACE_LOST_KHR;
  
@@ -318,7 +317,7 @@ index 27d6bb1..7a97f96 100644
      VkSurfaceFullScreenExclusiveInfoEXT fullScreenExclusiveInfo = { VK_STRUCTURE_TYPE_SURFACE_FULL_SCREEN_EXCLUSIVE_INFO_EXT };
      fullScreenExclusiveInfo.fullScreenExclusive = m_fullscreenMode;
  
-@@ -419,6 +676,9 @@ namespace dxvk {
+@@ -419,6 +675,9 @@ namespace dxvk {
      if (!m_surface)
        return false;
  
@@ -328,7 +327,7 @@ index 27d6bb1..7a97f96 100644
      std::vector<VkSurfaceFormatKHR> surfaceFormats;
      getSupportedFormats(surfaceFormats);
  
-@@ -653,6 +913,108 @@ namespace dxvk {
+@@ -653,6 +912,108 @@ namespace dxvk {
    }
  
  
@@ -399,7 +398,7 @@ index 27d6bb1..7a97f96 100644
 +    snprintf(shmName, sizeof(shmName), "/gt-spector-%s-frame", shmId);
 +    m_offscreenShmFd = shm_open(shmName, O_CREAT | O_RDWR, 0666);
 +    if (m_offscreenShmFd >= 0) {
-+      VkDeviceSize shmSize = stagingSize + 16;
++      VkDeviceSize shmSize = stagingSize + sizeof(ShmHeader);
 +      ftruncate(m_offscreenShmFd, shmSize);
 +      m_offscreenShmPtr = mmap(nullptr, shmSize, PROT_READ | PROT_WRITE,
 +          MAP_SHARED, m_offscreenShmFd, 0);
@@ -437,7 +436,7 @@ index 27d6bb1..7a97f96 100644
    void Presenter::destroySwapchain() {
      if (m_signal != nullptr)
        m_signal->wait(m_lastFrameId.load(std::memory_order_acquire));
-@@ -665,24 +1027,37 @@ namespace dxvk {
+@@ -665,24 +1026,37 @@ namespace dxvk {
      
      for (const auto& sem : m_semaphores) {
        m_vkd->vkDestroySemaphore(m_vkd->device(), sem.acquire, nullptr);
@@ -478,7 +477,7 @@ index 27d6bb1..7a97f96 100644
    }
  
  
-@@ -723,15 +1098,14 @@ namespace dxvk {
+@@ -723,15 +1097,14 @@ namespace dxvk {
        if (!frame.frameId)
          return;
  
