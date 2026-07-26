@@ -1,4 +1,3 @@
-import mmap
 import struct
 
 import numpy as np
@@ -22,7 +21,7 @@ class Screen:
         return self._frame
 
     def get_pixel(self, x: int, y: int) -> tuple[int, int, int]:
-        return tuple(map(int, self.frame[y, x]))
+        return (int(self.frame[y, x, 0]), int(self.frame[y, x, 1]), int(self.frame[y, x, 2]))
 
     def capture_area(self, x1: int, y1: int, x2: int, y2: int) -> np.ndarray:
         return self.frame[y1:y2, x1:x2].copy()
@@ -60,7 +59,7 @@ class ShmScreen:
         return self._frame
 
     def get_pixel(self, x: int, y: int) -> tuple[int, int, int]:
-        return tuple(map(int, self.frame[y, x]))
+        return (int(self.frame[y, x, 0]), int(self.frame[y, x, 1]), int(self.frame[y, x, 2]))
 
     def capture_area(self, x1: int, y1: int, x2: int, y2: int) -> np.ndarray:
         return self.frame[y1:y2, x1:x2].copy()
