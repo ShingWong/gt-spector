@@ -15,6 +15,8 @@ class Session:
             self._screen = ShmScreen(spec.path)
         else:
             raise NotImplementedError(f"Source kind {spec.kind} not implemented")
+        from .input import Input
+        self._input = Input(display)
 
     @property
     def frame(self) -> np.ndarray:
@@ -28,3 +30,18 @@ class Session:
 
     def capture_area(self, x1: int, y1: int, x2: int, y2: int):
         return self._screen.capture_area(x1, y1, x2, y2)
+
+    def move_mouse(self, x: int, y: int, speed: float = 400) -> None:
+        self._input.move_mouse(x, y, speed)
+
+    def click(self, x: int, y: int, speed: float = 400) -> None:
+        self._input.click(x, y, speed)
+
+    def drag(self, x1: int, y1: int, x2: int, y2: int, speed: float = 400) -> None:
+        self._input.drag(x1, y1, x2, y2, speed)
+
+    def key_press(self, key: str) -> None:
+        self._input.key_press(key)
+
+    def type_text(self, text: str) -> None:
+        self._input.type_text(text)
