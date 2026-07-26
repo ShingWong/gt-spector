@@ -47,22 +47,18 @@ class Session:
         self._input.type_text(text)
 
     def attach(self, display: str, source: str = "") -> None:
-        from .source import parse_source, SourceKind
-        self.display = display
         spec = parse_source(source)
         if spec.kind == SourceKind.FILE:
-            from .screen import Screen
             self._screen = Screen(spec.path)
         elif spec.kind == SourceKind.SHM:
-            from .screen import ShmScreen
             self._screen = ShmScreen(spec.path)
         else:
             raise NotImplementedError(f"Source kind {spec.kind}")
+        self.display = display
         from .input import Input
         self._input = Input(display)
 
     def detach(self) -> None:
-        from .screen import Screen
-        from .input import Input
-        self._screen = Screen("/dev/null")
-        self._input = Input(":0")
+        self.display = ""
+        self._screen = None
+        self._input = None
