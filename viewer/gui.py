@@ -41,10 +41,10 @@ class ViewerWindow:
         self._canvas_label = ttk.Label(self._frame, takefocus=True)
         self._canvas_label.pack()
         self._canvas_label.bind("<Motion>", self._on_mouse_move)
-        self._canvas_label.bind("<Button-1>", self._on_canvas_click)
+        self._canvas_label.bind("<ButtonPress-1>", self._on_canvas_click)
+        self._canvas_label.bind("<ButtonRelease-1>", self._on_canvas_release)
         self._canvas_label.bind("<Button-3>", self._on_canvas_right_click)
         self._canvas_label.bind("<Key>", self._on_key)
-        self._canvas_label.bind("<FocusIn>", lambda e: self._canvas_label.focus_set())
 
     def _setup_statusbar(self):
         self._status = ttk.Label(
@@ -86,10 +86,25 @@ class ViewerWindow:
     def _on_canvas_click(self, event):
         if not hasattr(self, "_scale") or self._scale == 0:
             return
+        self._canvas_label.focus_set()
+        # Store start position — if released without motion, it's a click
         fx = int(event.x / self._scale)
         fy = int(event.y / self._scale)
-        self._session.click(fx, fy)
-        self._status.config(text=f"Click: ({fx}, {fy})")
+        self._drag_start = (fx, fy)
+
+    def _on_canvas_release(self, event):
+        if not hasattr(self, "_scale") or self._scale == 0:
+            return
+        fx = int(event.x / self._scale)
+        fy = int(event.y / self._scale)
+        sx, sy = getattr(self, "_drag_start", (fx, fy))
+        self._drag_start = None
+        if sx == fx and sy == fy:
+            self._session.click(fx, fy)
+            self._status.config(text=f"Click: ({fx}, {fy})")
+        else:
+            self._session.drag(sx, sy, fx, fy)
+            self._status.config(text=f"Drag: ({sx},{sy}) -> ({fx},{fy})")
 
     def _on_canvas_right_click(self, event):
         if not hasattr(self, '_scale') or self._scale == 0:
