@@ -16,6 +16,8 @@ class ViewerWindow:
         self._setup_statusbar()
         self._running = True
         self._tk.protocol("WM_DELETE_WINDOW", self._on_close)
+        self._last_click_time = 0.0
+        self._drag_start = None
         self._poll()
 
     def _setup_menu(self):
@@ -43,8 +45,10 @@ class ViewerWindow:
         self._canvas_label.bind("<Motion>", self._on_mouse_move)
         self._canvas_label.bind("<ButtonPress-1>", self._on_canvas_click)
         self._canvas_label.bind("<ButtonRelease-1>", self._on_canvas_release)
-        self._canvas_label.bind("<ButtonPress-3>", self._on_canvas_right_click)
+        self._tk.bind("<ButtonRelease-1>", lambda e: self._on_canvas_release(e) if self._drag_start else None)
+        self._canvas_label.bind("<Button-3>", self._on_canvas_right_click)
         self._canvas_label.bind("<ButtonRelease-3>", self._on_canvas_right_release)
+        self._tk.bind("<ButtonRelease-3>", lambda e: self._on_canvas_right_release(e) if self._drag_start else None)
         self._canvas_label.bind("<Key>", self._on_key)
 
     def _setup_statusbar(self):
@@ -96,13 +100,28 @@ class ViewerWindow:
     def _on_canvas_release(self, event):
         if not hasattr(self, "_scale") or self._scale == 0:
             return
-        fx = int(event.x / self._scale)
+        if event.widget is not self._canvas_label:
+            cx = event.x_root - self._canvas_label.winfo_rootx()
+            cy = event.y_root - self._canvas_label.winfo_rooty()
+        else:
+            cx, cy = event.x, event.y
+        fx = int(cx / self._scale)
+        fy = int(cy / self._scale)
         fy = int(event.y / self._scale)
         sx, sy = getattr(self, "_drag_start", (fx, fy))
         self._drag_start = None
         if sx == fx and sy == fy:
-            self._session.click(fx, fy)
-            self._status.config(text=f"Click: ({fx}, {fy})")
+            import time
+            now = time.monotonic()
+            if now - self._last_click_time < 0.5:
+                self._session.click(fx, fy, speed=800)
+                self._session.click(fx, fy, speed=800)
+                self._status.config(text=f"Double-click: ({fx}, {fy})")
+                self._last_click_time = 0.0
+            else:
+                self._session.click(fx, fy)
+                self._status.config(text=f"Click: ({fx}, {fy})")
+                self._last_click_time = now
         else:
             self._session.drag(sx, sy, fx, fy)
             self._status.config(text=f"Drag: ({sx},{sy}) -> ({fx},{fy})")
@@ -117,8 +136,13 @@ class ViewerWindow:
     def _on_canvas_right_release(self, event):
         if not hasattr(self, '_scale') or self._scale == 0:
             return
-        fx = int(event.x / self._scale)
-        fy = int(event.y / self._scale)
+        if event.widget is not self._canvas_label:
+            cx = event.x_root - self._canvas_label.winfo_rootx()
+            cy = event.y_root - self._canvas_label.winfo_rooty()
+        else:
+            cx, cy = event.x, event.y
+        fx = int(cx / self._scale)
+        fy = int(cy / self._scale)
         sx, sy = getattr(self, "_drag_start", (fx, fy))
         self._drag_start = None
         dx = abs(fx - sx)
