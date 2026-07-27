@@ -30,13 +30,15 @@ index d329af3..f384afa 100644
    }
    
 diff --git a/src/dxvk/dxvk_presenter.cpp b/src/dxvk/dxvk_presenter.cpp
-index 27d6bb1..016629e 100644
+index 27d6bb1..769e42d 100644
 --- a/src/dxvk/dxvk_presenter.cpp
 +++ b/src/dxvk/dxvk_presenter.cpp
-@@ -5,8 +5,17 @@
+@@ -5,8 +5,19 @@
  
  #include "../wsi/wsi_window.h"
  
++#include <chrono>
++#include <cstdlib>
 +#include <cstdio>
 +#include <cstring>
 +
@@ -51,7 +53,7 @@ index 27d6bb1..016629e 100644
    Presenter::Presenter(
      const Rc<DxvkDevice>&   device,
      const Rc<sync::Signal>& signal,
-@@ -58,6 +67,12 @@ namespace dxvk {
+@@ -58,6 +69,12 @@ namespace dxvk {
      PresenterSync& semaphores = m_semaphores.at(m_frameIndex);
      sync = semaphores;
  
@@ -64,20 +66,23 @@ index 27d6bb1..016629e 100644
      // Don't acquire more than one image at a time
      if (m_acquireStatus == VK_NOT_READY) {
        waitForSwapchainFence(semaphores);
-@@ -80,6 +95,110 @@ namespace dxvk {
+@@ -80,6 +97,121 @@ namespace dxvk {
            uint64_t          frameId) {
      PresenterSync& currSync = m_semaphores.at(m_frameIndex);
  
 +    if (m_offscreen) {
-+      // Queue-ordered copy readback
-+      if (m_offscreenCmdPool && m_offscreenReadbackFence.size() > m_imageIndex
++      auto presentStart = std::chrono::steady_clock::now();
++      if (std::getenv("GT_SPECTOR_ENABLE_READBACK") != nullptr
++          && m_offscreenCmdPool && m_offscreenReadbackFence.size() > m_imageIndex
 +          && m_offscreenReadbackFence[m_imageIndex] != VK_NULL_HANDLE
 +          && m_offscreenShmFile) {
 +        // Wait for previous readback on this image to complete
++        auto fenceStart = std::chrono::steady_clock::now();
 +        m_vkd->vkWaitForFences(m_vkd->device(), 1,
 +            &m_offscreenReadbackFence[m_imageIndex], VK_TRUE, UINT64_MAX);
 +        m_vkd->vkResetFences(m_vkd->device(), 1,
 +            &m_offscreenReadbackFence[m_imageIndex]);
++        auto fenceEnd = std::chrono::steady_clock::now();
 +
 +        // Read back from staging buffer
 +        void* mapped = nullptr;
@@ -86,21 +91,27 @@ index 27d6bb1..016629e 100644
 +            0, &mapped) == VK_SUCCESS) {
 +          VkDeviceSize frameSize = VkDeviceSize(m_info.imageExtent.width)
 +                                 * VkDeviceSize(m_info.imageExtent.height) * 4;
-+          // Write header: frame_counter, width, height
++          // Write header
 +          PresenterShmHeader header;
 +          header.frameCounter = m_offscreenFrameCount++;
 +          header.width = m_info.imageExtent.width;
 +          header.height = m_info.imageExtent.height;
-+          // Write to frame dump file
++          auto fileStart = std::chrono::steady_clock::now();
 +          fseek(m_offscreenShmFile, 0, SEEK_SET);
 +          fwrite(&header, sizeof(header), 1, m_offscreenShmFile);
 +          fwrite(mapped, 1, static_cast<size_t>(frameSize), m_offscreenShmFile);
-+          fflush(m_offscreenShmFile);
++          auto fileEnd = std::chrono::steady_clock::now();
 +          m_vkd->vkUnmapMemory(m_vkd->device(),
 +              m_offscreenStagingMem[m_imageIndex]);
++
++          auto fenceUs = std::chrono::duration_cast<std::chrono::microseconds>(fenceEnd - fenceStart).count();
++          auto fileUs = std::chrono::duration_cast<std::chrono::microseconds>(fileEnd - fileStart).count();
++          Logger::info(str::format("Readback: frame=", m_offscreenFrameCount - 1,
++              " fence=", fenceUs, "us file=", fileUs, "us"));
 +        }
 +
-+        // Submit copy command buffer (queue-ordered, no waits)
++        // Submit copy command buffer
++        auto submitStart = std::chrono::steady_clock::now();
 +        VkCommandBufferAllocateInfo allocInfo = {
 +            VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
 +        allocInfo.commandPool        = m_offscreenCmdPool;
@@ -115,7 +126,6 @@ index 27d6bb1..016629e 100644
 +          beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 +
 +          if (m_vkd->vkBeginCommandBuffer(cmdBuf, &beginInfo) == VK_SUCCESS) {
-+            // Barrier: COLOR_ATTACHMENT_OPTIMAL -> TRANSFER_SRC_OPTIMAL
 +            VkImageMemoryBarrier toTransfer = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
 +            toTransfer.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 +            toTransfer.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
@@ -142,7 +152,6 @@ index 27d6bb1..016629e 100644
 +                m_images[m_imageIndex].image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 +                m_offscreenStagingBuf[m_imageIndex], 1, &region);
 +
-+            // Barrier: TRANSFER_SRC_OPTIMAL -> COLOR_ATTACHMENT_OPTIMAL
 +            VkImageMemoryBarrier toColor = toTransfer;
 +            toColor.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 +            toColor.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
@@ -165,6 +174,10 @@ index 27d6bb1..016629e 100644
 +          m_vkd->vkFreeCommandBuffers(m_vkd->device(),
 +              m_offscreenCmdPool, 1, &cmdBuf);
 +        }
++        auto submitEnd = std::chrono::steady_clock::now();
++        auto totalUs = std::chrono::duration_cast<std::chrono::microseconds>(submitEnd - presentStart).count();
++        Logger::info(str::format("Readback: total=", totalUs, "us submit=",
++            std::chrono::duration_cast<std::chrono::microseconds>(submitEnd - submitStart).count(), "us"));
 +      }
 +
 +      m_frameIndex += 1;
@@ -175,7 +188,7 @@ index 27d6bb1..016629e 100644
      VkPresentIdKHR presentId = { VK_STRUCTURE_TYPE_PRESENT_ID_KHR };
      presentId.swapchainCount = 1;
      presentId.pPresentIds   = &frameId;
-@@ -177,6 +296,143 @@ namespace dxvk {
+@@ -177,6 +309,143 @@ namespace dxvk {
      if (!m_surface)
        return VK_ERROR_SURFACE_LOST_KHR;
  
@@ -319,7 +332,7 @@ index 27d6bb1..016629e 100644
      VkSurfaceFullScreenExclusiveInfoEXT fullScreenExclusiveInfo = { VK_STRUCTURE_TYPE_SURFACE_FULL_SCREEN_EXCLUSIVE_INFO_EXT };
      fullScreenExclusiveInfo.fullScreenExclusive = m_fullscreenMode;
  
-@@ -419,6 +675,9 @@ namespace dxvk {
+@@ -419,6 +688,9 @@ namespace dxvk {
      if (!m_surface)
        return false;
  
@@ -329,7 +342,7 @@ index 27d6bb1..016629e 100644
      std::vector<VkSurfaceFormatKHR> surfaceFormats;
      getSupportedFormats(surfaceFormats);
  
-@@ -653,6 +912,105 @@ namespace dxvk {
+@@ -653,6 +925,105 @@ namespace dxvk {
    }
  
  
@@ -400,10 +413,10 @@ index 27d6bb1..016629e 100644
 +    VkDeviceSize shmSize = stagingSize + sizeof(PresenterShmHeader);
 +    m_offscreenShmFile = fopen(shmPath, "wb");
 +    if (m_offscreenShmFile) {
++      setbuf(m_offscreenShmFile, NULL);
 +      fseek(m_offscreenShmFile, static_cast<long>(shmSize - 1), SEEK_SET);
 +      fputc(0, m_offscreenShmFile);
 +      rewind(m_offscreenShmFile);
-+      fflush(m_offscreenShmFile);
 +      m_offscreenShmPtr = m_offscreenShmFile;
 +      m_offscreenShmSize = shmSize;
 +    }
@@ -435,7 +448,7 @@ index 27d6bb1..016629e 100644
    void Presenter::destroySwapchain() {
      if (m_signal != nullptr)
        m_signal->wait(m_lastFrameId.load(std::memory_order_acquire));
-@@ -665,24 +1023,37 @@ namespace dxvk {
+@@ -665,24 +1036,37 @@ namespace dxvk {
      
      for (const auto& sem : m_semaphores) {
        m_vkd->vkDestroySemaphore(m_vkd->device(), sem.acquire, nullptr);
@@ -476,7 +489,7 @@ index 27d6bb1..016629e 100644
    }
  
  
-@@ -723,15 +1094,14 @@ namespace dxvk {
+@@ -723,15 +1107,14 @@ namespace dxvk {
        if (!frame.frameId)
          return;
  
