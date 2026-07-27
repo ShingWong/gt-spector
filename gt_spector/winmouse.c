@@ -60,6 +60,6 @@ int main(int argc, char* argv[]) {
         send_move(x, y, 1);
     }
 
-    Sleep(200);
+    Sleep(50);
     return 0;
 }
