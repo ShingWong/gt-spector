@@ -50,6 +50,8 @@ class ViewerWindow:
         self._canvas_label.bind("<Button-3>", self._on_canvas_right_click)
         self._canvas_label.bind("<ButtonRelease-3>", self._on_canvas_right_release)
         self._tk.bind("<ButtonRelease-3>", lambda e: self._on_canvas_right_release(e) if self._drag_start else None)
+        self._canvas_label.bind("<Button-2>", lambda e: self._session._input.middle_click(int(e.x/self._scale), int(e.y/self._scale)))
+        self._canvas_label.bind("<MouseWheel>", self._on_scroll)
         self._canvas_label.bind("<Key>", self._on_key)
 
     def _setup_statusbar(self):
@@ -116,8 +118,7 @@ class ViewerWindow:
                 import time
                 now = time.monotonic()
                 if now - self._last_click_time < 0.5:
-                    self._session.click(fx, fy, speed=800)
-                    self._session.click(fx, fy, speed=800)
+                    self._session._input.double_click(fx, fy)
                     self._status.config(text=f"Double-click: ({fx}, {fy})")
                     self._last_click_time = 0.0
                 else:
@@ -155,6 +156,10 @@ class ViewerWindow:
             return
         self._session.move_mouse(fx, fy)
         self._status.config(text=f"Move: ({sx},{sy}) -> ({fx},{fy})")
+
+    def _on_scroll(self, event):
+        self._session._input.scroll(event.delta)
+        self._status.config(text=f"Scroll: {'up' if event.delta > 0 else 'down'}")
 
     def _on_key(self, event):
         if event.char and event.char.isprintable():
