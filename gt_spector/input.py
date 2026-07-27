@@ -40,6 +40,13 @@ class Input:
             env=self._env, timeout=5, check=False
         )
 
+    def click_right(self, x: int, y: int) -> None:
+        args = ["xdotool", "mousemove"] + self._wid_args() + [str(x), str(y)]
+        subprocess.run(args, env=self._env, timeout=2, check=False)
+        time.sleep(0.05)
+        subprocess.run(["xdotool", "click"] + self._wid_args() + ["3"],
+                       env=self._env, timeout=5, check=False)
+
     def middle_click(self, x: int, y: int) -> None:
         args = ["xdotool", "mousemove"] + self._wid_args() + [str(x), str(y)]
         subprocess.run(args, env=self._env, timeout=2, check=False)

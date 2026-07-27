@@ -153,9 +153,11 @@ class ViewerWindow:
         dx = abs(fx - sx)
         dy = abs(fy - sy)
         if dx == 0 and dy == 0:
-            return
-        self._session.move_mouse(fx, fy)
-        self._status.config(text=f"Move: ({sx},{sy}) -> ({fx},{fy})")
+            self._session._input.click_right(fx, fy)
+            self._status.config(text=f"Right-click: ({fx}, {fy})")
+        else:
+            self._session.move_mouse(fx, fy)
+            self._status.config(text=f"Move: ({sx},{sy}) -> ({fx},{fy})")
 
     def _on_scroll(self, event):
         self._session._input.scroll(event.delta)
