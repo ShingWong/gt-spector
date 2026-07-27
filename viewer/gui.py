@@ -43,7 +43,8 @@ class ViewerWindow:
         self._canvas_label.bind("<Motion>", self._on_mouse_move)
         self._canvas_label.bind("<ButtonPress-1>", self._on_canvas_click)
         self._canvas_label.bind("<ButtonRelease-1>", self._on_canvas_release)
-        self._canvas_label.bind("<Button-3>", self._on_canvas_right_click)
+        self._canvas_label.bind("<ButtonPress-3>", self._on_canvas_right_click)
+        self._canvas_label.bind("<ButtonRelease-3>", self._on_canvas_right_release)
         self._canvas_label.bind("<Key>", self._on_key)
 
     def _setup_statusbar(self):
@@ -111,8 +112,21 @@ class ViewerWindow:
             return
         fx = int(event.x / self._scale)
         fy = int(event.y / self._scale)
+        self._drag_start = (fx, fy)
+
+    def _on_canvas_right_release(self, event):
+        if not hasattr(self, '_scale') or self._scale == 0:
+            return
+        fx = int(event.x / self._scale)
+        fy = int(event.y / self._scale)
+        sx, sy = getattr(self, "_drag_start", (fx, fy))
+        self._drag_start = None
+        dx = abs(fx - sx)
+        dy = abs(fy - sy)
+        if dx == 0 and dy == 0:
+            return
         self._session.move_mouse(fx, fy)
-        self._status.config(text=f"Move: ({fx}, {fy})")
+        self._status.config(text=f"Move: ({sx},{sy}) -> ({fx},{fy})")
 
     def _on_key(self, event):
         if event.char and event.char.isprintable():
