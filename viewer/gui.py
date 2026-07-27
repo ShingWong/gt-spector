@@ -18,6 +18,7 @@ class ViewerWindow:
         self._tk.protocol("WM_DELETE_WINDOW", self._on_close)
         self._last_click_time = 0.0
         self._drag_start = None
+        self._handling_release = False
         self._poll()
 
     def _setup_menu(self):
@@ -98,33 +99,36 @@ class ViewerWindow:
         self._drag_start = (fx, fy)
 
     def _on_canvas_release(self, event):
-        if not hasattr(self, "_scale") or self._scale == 0:
+        if self._handling_release or not hasattr(self, "_scale") or self._scale == 0:
             return
-        if event.widget is not self._canvas_label:
-            cx = event.x_root - self._canvas_label.winfo_rootx()
-            cy = event.y_root - self._canvas_label.winfo_rooty()
-        else:
-            cx, cy = event.x, event.y
-        fx = int(cx / self._scale)
-        fy = int(cy / self._scale)
-        fy = int(event.y / self._scale)
-        sx, sy = getattr(self, "_drag_start", (fx, fy))
-        self._drag_start = None
-        if sx == fx and sy == fy:
-            import time
-            now = time.monotonic()
-            if now - self._last_click_time < 0.5:
-                self._session.click(fx, fy, speed=800)
-                self._session.click(fx, fy, speed=800)
-                self._status.config(text=f"Double-click: ({fx}, {fy})")
-                self._last_click_time = 0.0
+        self._handling_release = True
+        try:
+            if event.widget is not self._canvas_label:
+                cx = event.x_root - self._canvas_label.winfo_rootx()
+                cy = event.y_root - self._canvas_label.winfo_rooty()
             else:
-                self._session.click(fx, fy)
-                self._status.config(text=f"Click: ({fx}, {fy})")
-                self._last_click_time = now
-        else:
-            self._session.drag(sx, sy, fx, fy)
-            self._status.config(text=f"Drag: ({sx},{sy}) -> ({fx},{fy})")
+                cx, cy = event.x, event.y
+            fx = int(cx / self._scale)
+            fy = int(cy / self._scale)
+            sx, sy = self._drag_start or (fx, fy)
+            self._drag_start = None
+            if sx == fx and sy == fy:
+                import time
+                now = time.monotonic()
+                if now - self._last_click_time < 0.5:
+                    self._session.click(fx, fy, speed=800)
+                    self._session.click(fx, fy, speed=800)
+                    self._status.config(text=f"Double-click: ({fx}, {fy})")
+                    self._last_click_time = 0.0
+                else:
+                    self._session.click(fx, fy)
+                    self._status.config(text=f"Click: ({fx}, {fy})")
+                    self._last_click_time = now
+            else:
+                self._session.drag(sx, sy, fx, fy)
+                self._status.config(text=f"Drag: ({sx},{sy}) -> ({fx},{fy})")
+        finally:
+            self._handling_release = False
 
     def _on_canvas_right_click(self, event):
         if not hasattr(self, '_scale') or self._scale == 0:
