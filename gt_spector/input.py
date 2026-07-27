@@ -19,6 +19,7 @@ class Input:
             ["xdotool", "mousemove", str(x), str(y)],
             env=self._env, timeout=2, check=False
         )
+        time.sleep(0.05)
         subprocess.run(["xdotool", "click", "1"], env=self._env, timeout=5, check=False)
 
     def double_click(self, x: int, y: int) -> None:
@@ -48,7 +49,9 @@ class Input:
             ["xdotool", "mousemove", str(x1), str(y1)],
             env=self._env, timeout=2, check=False
         )
+        time.sleep(0.05)
         subprocess.run(["xdotool", "mousedown", "1"], env=self._env, timeout=5, check=False)
+        time.sleep(0.05)
         subprocess.run(
             ["xdotool", "mousemove", str(x2), str(y2)],
             env=self._env, timeout=2, check=False
