@@ -38,11 +38,13 @@ class ViewerWindow:
     def _setup_canvas(self):
         self._frame = ttk.Frame(self._tk)
         self._frame.pack(fill=tk.BOTH, expand=True)
-        self._canvas_label = ttk.Label(self._frame)
+        self._canvas_label = ttk.Label(self._frame, takefocus=True)
         self._canvas_label.pack()
         self._canvas_label.bind("<Motion>", self._on_mouse_move)
         self._canvas_label.bind("<Button-1>", self._on_canvas_click)
         self._canvas_label.bind("<Button-3>", self._on_canvas_right_click)
+        self._canvas_label.bind("<Key>", self._on_key)
+        self._canvas_label.bind("<FocusIn>", lambda e: self._canvas_label.focus_set())
 
     def _setup_statusbar(self):
         self._status = ttk.Label(
@@ -90,12 +92,29 @@ class ViewerWindow:
         self._status.config(text=f"Click: ({fx}, {fy})")
 
     def _on_canvas_right_click(self, event):
-        if not hasattr(self, "_scale") or self._scale == 0:
+        if not hasattr(self, '_scale') or self._scale == 0:
             return
         fx = int(event.x / self._scale)
         fy = int(event.y / self._scale)
         self._session.move_mouse(fx, fy)
         self._status.config(text=f"Move: ({fx}, {fy})")
+
+    def _on_key(self, event):
+        if event.char and event.char.isprintable():
+            self._session.type_text(event.char)
+        elif event.keysym == "Return":
+            self._session.key_press("Return")
+        elif event.keysym == "Tab":
+            self._session.key_press("Tab")
+        elif event.keysym == "Escape":
+            self._session.key_press("Escape")
+        elif event.keysym == "BackSpace":
+            self._session.key_press("BackSpace")
+        elif event.keysym == "Delete":
+            self._session.key_press("Delete")
+        elif event.keysym in ("Up", "Down", "Left", "Right"):
+            self._session.key_press(event.keysym)
+        self._status.config(text=f"Key: {event.keysym}")
 
     def _capture(self):
         from datetime import datetime
