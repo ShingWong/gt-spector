@@ -43,7 +43,11 @@ class ViewerWindow:
         self._frame = ttk.Frame(self._tk)
         self._frame.pack(fill=tk.BOTH, expand=True)
         self._canvas_label = ttk.Label(self._frame, takefocus=True)
-        self._canvas_label.pack()
+        self._frame.columnconfigure(0, weight=1)
+        self._frame.rowconfigure(0, weight=1)
+        self._canvas_label.grid()
+        self._canvas_label.bind("<Configure>", self._on_label_resize)
+        self._max_view = 800
         self._canvas_label.bind("<Motion>", self._on_mouse_move)
         self._canvas_label.bind("<ButtonPress-1>", self._on_canvas_click)
         self._canvas_label.bind("<B1-Motion>", self._on_canvas_drag)
@@ -72,8 +76,8 @@ class ViewerWindow:
             self._session.refresh()
             frame = self._session.frame
             h, w = frame.shape[:2]
-            fw = max(self._frame.winfo_width(), 100)
-            fh = max(self._frame.winfo_height(), 100)
+            fw = self._canvas_label.winfo_width() or self._max_view
+            fh = self._canvas_label.winfo_height() or self._max_view
             scale = min(fw / w, fh / h, 1.0)
             nw, nh = int(w * scale), int(h * scale)
             img = Image.fromarray(frame).resize((nw, nh), Image.Resampling.NEAREST)
@@ -85,6 +89,9 @@ class ViewerWindow:
             self._status.config(text=f"Error: {e}")
         delay = max(50, int(1000 / self._session.fps))
         self._tk.after(delay, self._poll)
+
+    def _on_label_resize(self, event):
+        self._max_view = max(event.width, event.height)
 
     def _on_mouse_move(self, event):
         if not hasattr(self, "_scale") or self._scale == 0:
