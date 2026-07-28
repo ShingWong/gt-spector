@@ -72,8 +72,9 @@ class ViewerWindow:
             self._session.refresh()
             frame = self._session.frame
             h, w = frame.shape[:2]
-            max_size = 800
-            scale = min(max_size / w, max_size / h, 1.0)
+            fw = max(self._frame.winfo_width(), 100)
+            fh = max(self._frame.winfo_height(), 100)
+            scale = min(fw / w, fh / h, 1.0)
             nw, nh = int(w * scale), int(h * scale)
             img = Image.fromarray(frame).resize((nw, nh), Image.Resampling.NEAREST)
             self._tk_photo = ImageTk.PhotoImage(img)
