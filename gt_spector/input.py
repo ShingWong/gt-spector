@@ -41,7 +41,10 @@ class Input:
 
     def click_right(self, x: int, y: int) -> None:
         self._xd(self._mw(x, y))
-        self._xd(["click", "3"])
+        self._xd(["mousedown", "3"])
+        import time
+        time.sleep(0.8)
+        self._xd(["mouseup", "3"])
 
     def double_click(self, x: int, y: int) -> None:
         self._xd(self._mw(x, y))
@@ -50,6 +53,23 @@ class Input:
     def middle_click(self, x: int, y: int) -> None:
         self._xd(self._mw(x, y))
         self._xd(["click", "2"])
+
+    def drag_right(self, x1: int, y1: int, x2: int, y2: int,
+                   speed: float = 400) -> None:
+        self._xd(self._mw(x1, y1))
+        self._xd(["mousedown", "3"])
+        import time
+        dx = x2 - x1
+        dy = y2 - y1
+        d = (dx * dx + dy * dy) ** 0.5
+        steps = max(1, int(d / 10))
+        step_delay = d / (steps * speed) if speed > 0 else 0
+        for i in range(1, steps + 1):
+            t = i / steps
+            self._xd(self._mw(int(x1 + dx * t), int(y1 + dy * t)))
+            if step_delay > 0:
+                time.sleep(step_delay)
+        self._xd(["mouseup", "3"])
 
     def scroll(self, direction: int, amount: int = 1) -> None:
         btn = "4" if direction > 0 else "5"
