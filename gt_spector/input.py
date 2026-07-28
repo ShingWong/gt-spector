@@ -77,7 +77,15 @@ class Input:
         self._xd(["mouseup", "1"])
 
     def key_press(self, key: str) -> None:
-        self._xd(["key", key])
+        wid = self._find_window()
+        if wid:
+            self._xd(["--window", wid, "key", key])
+        else:
+            self._xd(["key", key])
 
     def type_text(self, text: str) -> None:
-        self._xd(["type", text])
+        wid = self._find_window()
+        if wid:
+            self._xd(["--window", wid, "type", text])
+        else:
+            self._xd(["type", text])
