@@ -79,13 +79,13 @@ class Input:
     def key_press(self, key: str) -> None:
         wid = self._find_window()
         if wid:
-            self._xd(["--window", wid, "key", key])
+            self._xd(["key", "--window", wid, key])
         else:
             self._xd(["key", key])
 
     def type_text(self, text: str) -> None:
         wid = self._find_window()
         if wid:
-            self._xd(["--window", wid, "type", text])
+            self._xd(["type", "--window", wid, text])
         else:
             self._xd(["type", text])
