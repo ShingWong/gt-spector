@@ -108,18 +108,29 @@ class BotManager:
 
     def start_xvfb(self, bot: Bot) -> None:
         display = bot.display
-        # Kill any old Xvfb on this display
         subprocess.run(["fuser", "-k", f"/tmp/.X11-unix/X{display}"],
                        capture_output=True, timeout=5)
-        time.sleep(1)
+        subprocess.run(["fuser", "-k", f"/tmp/.X{display}-lock"],
+                       capture_output=True, timeout=5)
+        for p in (f"/tmp/.X{display}-lock", f"/tmp/.X11-unix/X{display}"):
+            try:
+                os.remove(p)
+            except FileNotFoundError:
+                pass
         proc = subprocess.Popen(
             ["Xvfb", f":{display}", "-screen", "0", "1152x864x24",
-             "-nolisten", "tcp", "-noreset", "-ac", "+extension", "GLX"],
+             "-nolisten", "tcp", "-noreset", "-ac"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             preexec_fn=os.setpgrp,
         )
         bot.xvfb_pid = proc.pid
         time.sleep(2)
+        # Verify it's running
+        try:
+            subprocess.run(["xdpyinfo", "-display", f":{display}"],
+                           capture_output=True, timeout=3, check=True)
+        except subprocess.CalledProcessError:
+            raise RuntimeError(f"Xvfb :{display} failed to start")
 
     def start_game(self, bot: Bot) -> None:
         if bot.state == BotState.RUNNING:
