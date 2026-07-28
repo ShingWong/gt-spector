@@ -65,6 +65,9 @@ class BotConsole:
         self._build_rows()
 
     def _build_rows(self):
+        for w in self._list_frame.winfo_children():
+            w.destroy()
+        self._rows.clear()
         for bot in self._manager.bots:
             row = ttk.Frame(self._list_frame)
             row.pack(fill=tk.X, pady=2)
@@ -155,5 +158,4 @@ class BotConsole:
         self._tk.after(2000, self._poll)
 
     def run(self):
-        self._build_rows()
         self._tk.mainloop()
