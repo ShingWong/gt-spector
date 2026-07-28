@@ -40,6 +40,9 @@ class BotConsole:
         ttk.Button(toolbar, text="Stop Selected", command=lambda: self._action("stop")).pack(side=tk.LEFT, padx=2)
         ttk.Button(toolbar, text="Restart Selected", command=lambda: self._action("restart")).pack(side=tk.LEFT, padx=2)
         ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=4)
+        ttk.Button(toolbar, text="Select All", command=self._on_select_all).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Deselect All", command=self._on_deselect_all).pack(side=tk.LEFT, padx=2)
+        ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=4)
         ttk.Button(toolbar, text="Start All", command=lambda: self._action_all("start")).pack(side=tk.LEFT, padx=2)
         ttk.Button(toolbar, text="Stop All", command=lambda: self._action_all("stop")).pack(side=tk.LEFT, padx=2)
         ttk.Button(toolbar, text="Restart All", command=lambda: self._action_all("restart")).pack(side=tk.LEFT, padx=2)
@@ -73,6 +76,7 @@ class BotConsole:
         self._tree.column("display", width=60)
         self._tree.column("pid", width=80)
         self._tree.pack(fill=tk.BOTH, expand=True, padx=4, pady=2)
+        self._tree.bind("<ButtonRelease-1>", self._on_tree_click)
 
         scroll = ttk.Scrollbar(left, orient=tk.VERTICAL, command=self._tree.yview)
         scroll.pack(side=tk.RIGHT, fill=tk.Y)
@@ -104,6 +108,27 @@ class BotConsole:
                 text=bot.name,
                 values=(bot.state.value, f":{bot.display}", bot.pid or ""),
             )
+
+    def _on_select_all(self):
+        self._tree.selection_set(self._tree.get_children())
+        self._selected = set(self._tree.selection())
+        self._status.config(text=f"Selected all {len(self._selected)} bots")
+
+    def _on_deselect_all(self):
+        self._tree.selection_remove(self._tree.selection())
+        self._selected.clear()
+        self._status.config(text="No bots selected")
+
+    def _on_tree_click(self, event):
+        item = self._tree.identify_row(event.y)
+        if item:
+            if item in self._selected:
+                self._tree.selection_remove(item)
+                self._selected.discard(item)
+            else:
+                self._tree.selection_add(item)
+                self._selected.add(item)
+            self._on_select(event)
 
     def _on_select(self, event):
         self._selected = set(self._tree.selection())

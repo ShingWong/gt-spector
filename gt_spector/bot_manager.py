@@ -130,11 +130,11 @@ class BotManager:
         if os.path.exists(shm_path):
             os.remove(shm_path)
 
-        env = {
-            "DISPLAY": f":{bot.display}",
-            "WINEPREFIX": bot.prefix,
-            "GT_SPECTOR_ENABLE_READBACK": "1",
-            "GT_SPECTOR_SHM_ID": str(bot.shm_id),
+        env = {**os.environ,
+               "DISPLAY": f":{bot.display}",
+               "WINEPREFIX": bot.prefix,
+               "GT_SPECTOR_ENABLE_READBACK": "1",
+               "GT_SPECTOR_SHM_ID": str(bot.shm_id),
         }
         proc = subprocess.Popen(
             [WINE_BIN, "Doomsday.exe",
