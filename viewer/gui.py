@@ -20,6 +20,9 @@ class ViewerWindow:
         self._drag_start = None
         self._is_dragging = False
         self._handling_release = False
+        self._native_size = (1152, 720)
+        self._max_view = max(self._native_size)
+        self._tk.geometry(f"{self._native_size[0]}x{self._native_size[1]}")
         self._poll()
 
     def _setup_menu(self):
@@ -37,6 +40,7 @@ class ViewerWindow:
         ttk.Button(toolbar, text="Attach", command=self._on_attach).pack(side=tk.LEFT, padx=2)
         ttk.Button(toolbar, text="Detach", command=self._on_detach).pack(side=tk.LEFT, padx=2)
         ttk.Button(toolbar, text="Capture", command=self._capture).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Reset Zoom", command=self._on_reset_zoom).pack(side=tk.LEFT, padx=2)
         ttk.Button(toolbar, text="Quit", command=self._on_close).pack(side=tk.LEFT, padx=2)
 
     def _setup_canvas(self):
@@ -89,6 +93,10 @@ class ViewerWindow:
             self._status.config(text=f"Error: {e}")
         delay = max(50, int(1000 / self._session.fps))
         self._tk.after(delay, self._poll)
+
+    def _on_reset_zoom(self):
+        self._max_view = max(self._native_size)
+        self._tk.geometry(f"{self._native_size[0]}x{self._native_size[1]}")
 
     def _on_label_resize(self, event):
         self._max_view = max(event.width, event.height)
