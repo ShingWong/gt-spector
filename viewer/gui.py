@@ -20,9 +20,8 @@ class ViewerWindow:
         self._drag_start = None
         self._is_dragging = False
         self._handling_release = False
-        self._native_size = (1152, 720)
-        self._max_view = max(self._native_size)
-        self._tk.geometry(f"{self._native_size[0]}x{self._native_size[1]}")
+        self._tk.geometry("1152x720")
+        self._scale = 1.0
         self._poll()
 
     def _setup_menu(self):
@@ -50,8 +49,6 @@ class ViewerWindow:
         self._frame.columnconfigure(0, weight=1)
         self._frame.rowconfigure(0, weight=1)
         self._canvas_label.grid()
-        self._canvas_label.bind("<Configure>", self._on_label_resize)
-        self._max_view = 800
         self._canvas_label.bind("<Motion>", self._on_mouse_move)
         self._canvas_label.bind("<ButtonPress-1>", self._on_canvas_click)
         self._canvas_label.bind("<B1-Motion>", self._on_canvas_drag)
@@ -80,10 +77,11 @@ class ViewerWindow:
             self._session.refresh()
             frame = self._session.frame
             h, w = frame.shape[:2]
-            fw = self._canvas_label.winfo_width() or self._max_view
-            fh = self._canvas_label.winfo_height() or self._max_view
-            scale = min(fw / w, fh / h, 1.0)
-            nw, nh = int(w * scale), int(h * scale)
+            self._tk.update_idletasks()
+            fw = max(self._frame.winfo_width(), 50)
+            fh = max(self._frame.winfo_height(), 50)
+            scale = min(fw / w, fh / h)
+            nw, nh = max(int(w * scale), 50), max(int(h * scale), 50)
             img = Image.fromarray(frame).resize((nw, nh), Image.Resampling.NEAREST)
             self._tk_photo = ImageTk.PhotoImage(img)
             self._canvas_label.config(image=self._tk_photo)
@@ -95,11 +93,7 @@ class ViewerWindow:
         self._tk.after(delay, self._poll)
 
     def _on_reset_zoom(self):
-        self._max_view = max(self._native_size)
-        self._tk.geometry(f"{self._native_size[0]}x{self._native_size[1]}")
-
-    def _on_label_resize(self, event):
-        self._max_view = max(event.width, event.height)
+        self._tk.geometry("1152x720")
 
     def _on_mouse_move(self, event):
         if not hasattr(self, "_scale") or self._scale == 0:
