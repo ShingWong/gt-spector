@@ -62,6 +62,7 @@ class BotConsole:
         ]:
             ttk.Button(toolbar, text=text, command=cmd).pack(side=tk.LEFT, padx=2)
         ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=4)
+        ttk.Button(toolbar, text="Provision", command=self._on_provision).pack(side=tk.LEFT, padx=2)
         ttk.Button(toolbar, text="Check All", command=self._check_all).pack(side=tk.LEFT, padx=2)
         ttk.Button(toolbar, text="Uncheck All", command=self._uncheck_all).pack(side=tk.LEFT, padx=2)
 
@@ -145,6 +146,37 @@ class BotConsole:
             except Exception as e:
                 self._status.config(text=f"Error on {bot.name}: {e}")
         self._update_rows()
+
+    def _on_provision(self):
+        self._status.config(text="Provisioning bots from accounts file...")
+        self._tk.update()
+        import subprocess, os, shutil
+        base = "/home/swong/dls/wineprefix_bots"
+        for entry in os.listdir(base):
+            shutil.rmtree(os.path.join(base, entry), ignore_errors=True)
+        self._manager.bots.clear()
+        self._build_rows()
+        self._tk.update()
+
+        for name, email in self._accounts.items():
+            self._status.config(text=f"Building {name} ({email})...")
+            self._tk.update()
+            # Determine which reg file to use
+            account_num = int(name.replace("bot", ""))
+            if account_num == 1:
+                reg = "/tmp/igg_sr04_full.reg"
+            elif account_num == 2:
+                reg = "/tmp/igg_sr05_full.reg"
+            else:
+                reg = None
+            r = subprocess.run(
+                ["python3", "-m", "gt_spector.provision", "init", name,
+                 "--account", email] + (["--reg", reg] if reg and os.path.exists(reg) else []),
+                capture_output=True, text=True, timeout=120)
+            self._status.config(text=f"{name}: {r.stdout.strip()[-60:]}")
+            self._tk.update()
+        self._status.config(text="Provisioning complete")
+        self._refresh_bots()
 
     def _refresh_bots(self):
         self._manager.load_from_prefixes()
