@@ -107,11 +107,13 @@ class BotManager:
         return wins[0] if wins else None
 
     def start_xvfb(self, bot: Bot) -> None:
-        if bot.xvfb_pid and self._pid_alive(bot.xvfb_pid):
-            return
         display = bot.display
+        # Kill any old Xvfb on this display
+        subprocess.run(["fuser", "-k", f"/tmp/.X11-unix/X{display}"],
+                       capture_output=True, timeout=5)
+        time.sleep(1)
         proc = subprocess.Popen(
-            ["nohup", "Xvfb", f":{display}", "-screen", "0", "1152x864x24",
+            ["Xvfb", f":{display}", "-screen", "0", "1152x864x24",
              "-nolisten", "tcp", "-noreset", "-ac", "+extension", "GLX"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             preexec_fn=os.setpgrp,
