@@ -45,6 +45,14 @@ class Session:
         self._check_attached()
         self._input.move_mouse(x, y, speed)
 
+    def mouse_down(self) -> None:
+        self._check_attached()
+        self._input.mouse_down()
+
+    def mouse_up(self) -> None:
+        self._check_attached()
+        self._input.mouse_up()
+
     def click(self, x: int, y: int, speed: float = 400) -> None:
         self._check_attached()
         self._input.click(x, y, speed)

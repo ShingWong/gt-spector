@@ -18,6 +18,7 @@ class ViewerWindow:
         self._tk.protocol("WM_DELETE_WINDOW", self._on_close)
         self._last_click_time = 0.0
         self._drag_start = None
+        self._is_dragging = False
         self._handling_release = False
         self._poll()
 
@@ -45,13 +46,17 @@ class ViewerWindow:
         self._canvas_label.pack()
         self._canvas_label.bind("<Motion>", self._on_mouse_move)
         self._canvas_label.bind("<ButtonPress-1>", self._on_canvas_click)
+        self._canvas_label.bind("<B1-Motion>", self._on_canvas_drag)
         self._canvas_label.bind("<ButtonRelease-1>", self._on_canvas_release)
         self._tk.bind("<ButtonRelease-1>", lambda e: self._on_canvas_release(e) if self._drag_start else None)
-        self._canvas_label.bind("<Button-3>", self._on_canvas_right_click)
+        self._canvas_label.bind("<ButtonPress-3>", self._on_canvas_right_click)
+        self._canvas_label.bind("<B3-Motion>", self._on_canvas_right_drag)
         self._canvas_label.bind("<ButtonRelease-3>", self._on_canvas_right_release)
         self._tk.bind("<ButtonRelease-3>", lambda e: self._on_canvas_right_release(e) if self._drag_start else None)
-        self._canvas_label.bind("<Button-2>", lambda e: self._session._input.middle_click(int(e.x/self._scale), int(e.y/self._scale)))
+        self._canvas_label.bind("<ButtonPress-2>", lambda e: self._session._input.middle_click(int(e.x/self._scale), int(e.y/self._scale)))
         self._canvas_label.bind("<MouseWheel>", self._on_scroll)
+        self._canvas_label.bind("<Button-4>", lambda e: self._on_scroll_at(e, 1))
+        self._canvas_label.bind("<Button-5>", lambda e: self._on_scroll_at(e, -1))
         self._canvas_label.bind("<Key>", self._on_key)
 
     def _setup_statusbar(self):
@@ -95,10 +100,20 @@ class ViewerWindow:
         if not hasattr(self, "_scale") or self._scale == 0:
             return
         self._canvas_label.focus_set()
-        # Store start position — if released without motion, it's a click
         fx = int(event.x / self._scale)
         fy = int(event.y / self._scale)
         self._drag_start = (fx, fy)
+        self._is_dragging = False
+        self._session.move_mouse(fx, fy)
+        self._session.mouse_down()
+
+    def _on_canvas_drag(self, event):
+        if not hasattr(self, "_scale") or self._scale == 0:
+            return
+        self._is_dragging = True
+        fx = int(event.x / self._scale)
+        fy = int(event.y / self._scale)
+        self._session.move_mouse(fx, fy)
 
     def _on_canvas_release(self, event):
         if self._handling_release or not hasattr(self, "_scale") or self._scale == 0:
@@ -113,21 +128,23 @@ class ViewerWindow:
             fx = int(cx / self._scale)
             fy = int(cy / self._scale)
             sx, sy = self._drag_start or (fx, fy)
+            was_drag = self._is_dragging
+            self._is_dragging = False
             self._drag_start = None
-            if sx == fx and sy == fy:
+            if was_drag:
+                self._session.mouse_up()
+                self._status.config(text=f"Drag: ({sx},{sy}) -> ({fx},{fy})")
+            else:
                 import time
+                self._session.mouse_up()
                 now = time.monotonic()
                 if now - self._last_click_time < 0.5:
                     self._session._input.double_click(fx, fy)
                     self._status.config(text=f"Double-click: ({fx}, {fy})")
                     self._last_click_time = 0.0
                 else:
-                    self._session.click(fx, fy)
-                    self._status.config(text=f"Click: ({fx}, {fy})")
                     self._last_click_time = now
-            else:
-                self._session.drag(sx, sy, fx, fy)
-                self._status.config(text=f"Drag: ({sx},{sy}) -> ({fx},{fy})")
+                    self._status.config(text=f"Click: ({fx}, {fy})")
         finally:
             self._handling_release = False
 
@@ -137,6 +154,15 @@ class ViewerWindow:
         fx = int(event.x / self._scale)
         fy = int(event.y / self._scale)
         self._drag_start = (fx, fy)
+        self._is_dragging = False
+
+    def _on_canvas_right_drag(self, event):
+        if not hasattr(self, '_scale') or self._scale == 0:
+            return
+        self._is_dragging = True
+        fx = int(event.x / self._scale)
+        fy = int(event.y / self._scale)
+        self._session.move_mouse(fx, fy)
 
     def _on_canvas_right_release(self, event):
         if not hasattr(self, '_scale') or self._scale == 0:
@@ -149,19 +175,34 @@ class ViewerWindow:
         fx = int(cx / self._scale)
         fy = int(cy / self._scale)
         sx, sy = getattr(self, "_drag_start", (fx, fy))
+        was_drag = self._is_dragging
+        self._is_dragging = False
         self._drag_start = None
         dx = abs(fx - sx)
         dy = abs(fy - sy)
-        if dx == 0 and dy == 0:
+        if was_drag or dx >= 5 or dy >= 5:
+            self._session._input.drag_right(sx, sy, fx, fy)
+            self._status.config(text=f"Right-drag: ({sx},{sy}) -> ({fx},{fy})")
+        else:
             self._session._input.click_right(fx, fy)
             self._status.config(text=f"Right-click: ({fx}, {fy})")
-        else:
-            self._session.move_mouse(fx, fy)
-            self._status.config(text=f"Move: ({sx},{sy}) -> ({fx},{fy})")
 
     def _on_scroll(self, event):
-        self._session._input.scroll(event.delta)
-        self._status.config(text=f"Scroll: {'up' if event.delta > 0 else 'down'}")
+        direction = 1 if event.delta > 0 else -1
+        clicks = max(1, abs(event.delta) // 120)
+        fx = int(event.x / self._scale) if hasattr(self, "_scale") and self._scale else 0
+        fy = int(event.y / self._scale) if hasattr(self, "_scale") and self._scale else 0
+        self._session.move_mouse(fx, fy)
+        self._session._input.scroll(direction, clicks)
+        self._status.config(text=f"Scroll: {'up' if direction > 0 else 'down'}")
+
+    def _on_scroll_at(self, event, direction: int):
+        if not hasattr(self, "_scale") or self._scale == 0:
+            return
+        fx = int(event.x / self._scale)
+        fy = int(event.y / self._scale)
+        self._session.move_mouse(fx, fy)
+        self._session._input.scroll(direction, 2)
 
     def _on_key(self, event):
         if event.char and event.char.isprintable():
