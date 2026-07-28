@@ -132,12 +132,18 @@ class BotConsole:
 
     def _action(self, action: str):
         for bot in self._get_checked():
-            getattr(self._manager, f"{action}_game")(bot)
+            try:
+                getattr(self._manager, f"{action}_game")(bot)
+            except Exception as e:
+                self._status.config(text=f"Error on {bot.name}: {e}")
         self._update_rows()
 
     def _action_all(self, action: str):
         for bot in self._manager.bots:
-            getattr(self._manager, f"{action}_game")(bot)
+            try:
+                getattr(self._manager, f"{action}_game")(bot)
+            except Exception as e:
+                self._status.config(text=f"Error on {bot.name}: {e}")
         self._update_rows()
 
     def _refresh_bots(self):
