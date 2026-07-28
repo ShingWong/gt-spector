@@ -72,7 +72,8 @@ class BotManager:
                 continue
             bot = Bot(name=entry, prefix=prefix)
             try:
-                bot.display = int(entry.replace("bot", ""))
+                n = int(entry.replace("bot", ""))
+                bot.display = 9 + n
                 bot.shm_id = bot.display
             except ValueError:
                 bot.display = 9

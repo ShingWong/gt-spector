@@ -79,15 +79,15 @@ def cmd_init(name: str, account: str, reg_path: str | None):
     for dll in ("d3d11.dll", "dxgi.dll"):
         shutil.copy2(os.path.join(src_x86, dll), os.path.join(dst_x86, dll))
 
-    subprocess.run([WINE, "reg", "add", "HKCU\\Software\\Wine\\DllOverrides",
+    subprocess.run([WINE_BIN, "reg", "add", "HKCU\\Software\\Wine\\DllOverrides",
                     "/v", "d3d11", "/t", "REG_SZ", "/d", "native", "/f"],
                    env={"WINEPREFIX": dest}, capture_output=True)
-    subprocess.run([WINE, "reg", "add", "HKCU\\Software\\Wine\\DllOverrides",
+    subprocess.run([WINE_BIN, "reg", "add", "HKCU\\Software\\Wine\\DllOverrides",
                     "/v", "dxgi", "/t", "REG_SZ", "/d", "native", "/f"],
                    env={"WINEPREFIX": dest}, capture_output=True)
 
     if reg_path and os.path.exists(reg_path):
-        subprocess.run([WINE, "reg", "import", reg_path],
+        subprocess.run([WINE_BIN, "reg", "import", reg_path],
                        env={"WINEPREFIX": dest}, capture_output=True)
         print(f"Session applied from {reg_path}")
     else:
