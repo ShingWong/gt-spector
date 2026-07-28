@@ -8,6 +8,21 @@ class BotConsole:
     def __init__(self):
         self._manager = BotManager()
         self._manager.load_from_prefixes()
+        self._accounts = self._load_accounts()
+
+    def _load_accounts(self) -> dict[str, str]:
+        accounts = {}
+        try:
+            with open("/home/swong/dls/ahk/accounts") as f:
+                for i, line in enumerate(f):
+                    line = line.strip()
+                    if ":" in line:
+                        email = line.split(":")[0].strip()
+                        name = f"bot{i+1:02d}"
+                        accounts[name] = email
+        except FileNotFoundError:
+            pass
+        return accounts
 
         self._tk = tk.Tk()
         self._tk.title("gt-spector — Bot Console")
@@ -81,6 +96,10 @@ class BotConsole:
 
             name_lbl = ttk.Label(row, text=bot.name, width=8)
             name_lbl.pack(side=tk.LEFT)
+
+            acct = self._accounts.get(bot.name, "")
+            acct_lbl = ttk.Label(row, text=acct, width=20)
+            acct_lbl.pack(side=tk.LEFT)
 
             disp_lbl = ttk.Label(row, text=f":{bot.display}", width=6)
             disp_lbl.pack(side=tk.LEFT)

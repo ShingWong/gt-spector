@@ -56,7 +56,16 @@ def _display_num(name: str) -> int:
 
 def cmd_init(name: str, account: str, reg_path: str | None):
     dest = _prefix_path(name)
-    if os.path.exists(os.path.join(dest, "drive_c")):
+    already = os.path.exists(os.path.join(dest, "drive_c"))
+    if already and reg_path:
+        # Re-apply session
+        subprocess.run([WINE_BIN, "reg", "delete", "HKCU\\Software\\IGG", "/f"],
+                       env={"WINEPREFIX": dest}, capture_output=True)
+        subprocess.run([WINE_BIN, "reg", "import", reg_path],
+                       env={"WINEPREFIX": dest}, capture_output=True)
+        print(f"Session applied to {name}")
+        return
+    elif already:
         print(f"Prefix {name} already exists")
         return
 
