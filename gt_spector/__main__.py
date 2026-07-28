@@ -20,7 +20,14 @@ def main():
     parser.add_argument("--session", default=":9", help="DISPLAY target")
     parser.add_argument("--source", default=None, help="Frame source (default: shm://<session>)")
     parser.add_argument("--cli", action="store_true", help="CLI mode instead of GUI")
+    parser.add_argument("--bot-console", action="store_true", help="Bot management console")
     args = parser.parse_args()
+
+    if args.bot_console:
+        from viewer.bot_console import BotConsole
+
+        BotConsole().run()
+        return
 
     from .session import Session
 
