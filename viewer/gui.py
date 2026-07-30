@@ -1,3 +1,4 @@
+import time as _time
 import tkinter as tk
 from datetime import UTC
 from tkinter import ttk
@@ -20,8 +21,12 @@ class ViewerWindow:
         self._drag_start = None
         self._is_dragging = False
         self._handling_release = False
-        self._tk.geometry("1152x720")
+        self._tk.geometry("1152x914")
         self._scale = 1.0
+        self._frame_counter = 0
+        self._last_shm_counter = -1
+        self._fps_start = _time.monotonic()
+        self._fps_frames = 0
         self._poll()
 
     def _setup_menu(self):
@@ -40,6 +45,15 @@ class ViewerWindow:
         ttk.Button(toolbar, text="Detach", command=self._on_detach).pack(side=tk.LEFT, padx=2)
         ttk.Button(toolbar, text="Capture", command=self._capture).pack(side=tk.LEFT, padx=2)
         ttk.Button(toolbar, text="Reset Zoom", command=self._on_reset_zoom).pack(side=tk.LEFT, padx=2)
+        ttk.Label(toolbar, text="FPS:").pack(side=tk.LEFT, padx=(10, 2))
+        self._fps_var = tk.IntVar(value=self._session.fps)
+        self._fps_spin = ttk.Spinbox(
+            toolbar, from_=1, to=60, width=4,
+            textvariable=self._fps_var,
+            command=self._on_fps_change,
+        )
+        self._fps_spin.pack(side=tk.LEFT, padx=2)
+        self._fps_var.trace_add("write", lambda *a: self._on_fps_change())
         ttk.Button(toolbar, text="Quit", command=self._on_close).pack(side=tk.LEFT, padx=2)
 
     def _setup_canvas(self):
@@ -48,7 +62,7 @@ class ViewerWindow:
         self._canvas_label = ttk.Label(self._frame, takefocus=True)
         self._frame.columnconfigure(0, weight=1)
         self._frame.rowconfigure(0, weight=1)
-        self._canvas_label.grid()
+        self._canvas_label.grid(sticky="nsew")
         self._canvas_label.bind("<Motion>", self._on_mouse_move)
         self._canvas_label.bind("<ButtonPress-1>", self._on_canvas_click)
         self._canvas_label.bind("<B1-Motion>", self._on_canvas_drag)
@@ -74,26 +88,45 @@ class ViewerWindow:
         if not self._running:
             return
         try:
-            self._session.refresh()
+            shm_changed = self._session.refresh()
             frame = self._session.frame
             h, w = frame.shape[:2]
-            self._tk.update_idletasks()
-            fw = max(self._frame.winfo_width(), 50)
-            fh = max(self._frame.winfo_height(), 50)
-            scale = min(fw / w, fh / h)
-            nw, nh = max(int(w * scale), 50), max(int(h * scale), 50)
-            img = Image.fromarray(frame).resize((nw, nh), Image.Resampling.NEAREST)
-            self._tk_photo = ImageTk.PhotoImage(img)
-            self._canvas_label.config(image=self._tk_photo)
-            self._img_w, self._img_h = nw, nh
-            self._scale = scale
+            if shm_changed:
+                self._tk.update_idletasks()
+                fw = max(self._frame.winfo_width(), 50)
+                fh = max(self._frame.winfo_height(), 50)
+                scale = min(fw / w, fh / h)
+                nw, nh = max(int(w * scale), 50), max(int(h * scale), 50)
+                img = Image.fromarray(frame).resize((nw, nh), Image.Resampling.NEAREST)
+                self._tk_photo = ImageTk.PhotoImage(img)
+                self._canvas_label.config(image=self._tk_photo)
+                self._img_w, self._img_h = nw, nh
+                self._scale = scale
+                self._frame_counter += 1
+            # FPS tracking
+            self._fps_frames += 1
+            actual_fps = self._session.fps
+            if self._fps_frames >= max(actual_fps, 5) * 2:
+                elapsed = _time.monotonic() - self._fps_start
+                fps = self._fps_frames / elapsed if elapsed > 0 else 0
+                self._tk.title(f"gt-spector — {self._session.display} — {fps:.0f} FPS")
+                self._fps_start = _time.monotonic()
+                self._fps_frames = 0
         except Exception as e:  # noqa: BLE001
             self._status.config(text=f"Error: {e}")
         delay = max(50, int(1000 / self._session.fps))
         self._tk.after(delay, self._poll)
 
+    def _on_fps_change(self):
+        try:
+            val = self._fps_var.get()
+            if val >= 1:
+                self._session.fps = val
+        except (ValueError, tk.TclError):
+            pass
+
     def _on_reset_zoom(self):
-        self._tk.geometry("1152x720")
+        self._tk.geometry("1152x914")
 
     def _on_mouse_move(self, event):
         if not hasattr(self, "_scale") or self._scale == 0:
@@ -145,9 +178,8 @@ class ViewerWindow:
                 self._session.mouse_up()
                 self._status.config(text=f"Drag: ({sx},{sy}) -> ({fx},{fy})")
             else:
-                import time
                 self._session.mouse_up()
-                now = time.monotonic()
+                now = _time.monotonic()
                 if now - self._last_click_time < 0.5:
                     self._session._input.double_click(fx, fy)
                     self._status.config(text=f"Double-click: ({fx}, {fy})")
