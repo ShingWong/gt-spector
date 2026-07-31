@@ -263,7 +263,8 @@ def test_monitor_tick_reapplies_sound_on_pid_change(tmp_path, monkeypatch):
     c._runners = {}
     c._frames = {}
     applied = []
-    c._apply_sound_for_bot = lambda bot: applied.append(bot.pid)
+    c._apply_sound_for_bot = lambda bot: (applied.append(bot.pid),
+                                          c._sound_applied.__setitem__(bot.name, bot.pid))
 
     class FakeMonitor:
         def note_running(self, bot, now):
