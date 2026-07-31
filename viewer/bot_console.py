@@ -213,40 +213,43 @@ class BotConsole:
         self._rows.clear()
         header = ttk.Frame(self._list_frame)
         header.pack(fill=tk.X, pady=(0, 2))
-        for text, width in [
-            ("", 2), ("Bot", 8), ("Account", 18), ("Disp", 5), ("Status", 24),
-            ("Activity", 16), ("Loc", 12), ("CR", 4), ("IV", 4), ("Snd", 2),
-            ("CPU", 6), ("Mem", 6), ("PID", 10),
+        for text, width, anchor in [
+            ("", 2, tk.CENTER), ("Bot", 8, tk.W), ("Account", 18, tk.W),
+            ("Disp", 5, tk.E), ("Status", 24, tk.W), ("Activity", 16, tk.W),
+            ("Loc", 12, tk.W), ("CR", 4, tk.E), ("IV", 4, tk.E),
+            ("Snd", 2, tk.W), ("CPU", 6, tk.E), ("Mem", 6, tk.E),
+            ("PID", 10, tk.E),
         ]:
-            ttk.Label(header, text=text, width=width, font=("", 9, "bold")).pack(side=tk.LEFT)
+            ttk.Label(header, text=text, width=width, anchor=anchor,
+                      font=("", 9, "bold")).pack(side=tk.LEFT)
         ttk.Label(header, text="", width=5).pack(side=tk.RIGHT)
         for bot in self._manager.bots:
             row = ttk.Frame(self._list_frame)
             row.pack(fill=tk.X, pady=2)
             var = tk.BooleanVar()
             ttk.Checkbutton(row, variable=var, width=2).pack(side=tk.LEFT)
-            ttk.Label(row, text=bot.name, width=8).pack(side=tk.LEFT)
+            ttk.Label(row, text=bot.name, width=8, anchor=tk.W).pack(side=tk.LEFT)
             acct = self._accounts.get(bot.name, "")
             ttk.Label(row, text=acct, width=18, anchor=tk.W).pack(side=tk.LEFT)
-            ttk.Label(row, text=f":{bot.display}", width=5).pack(side=tk.LEFT)
-            status_lbl = ttk.Label(row, width=24)
+            ttk.Label(row, text=f":{bot.display}", width=5, anchor=tk.E).pack(side=tk.LEFT)
+            status_lbl = ttk.Label(row, width=24, anchor=tk.W)
             status_lbl.pack(side=tk.LEFT)
             status_tip = ToolTip(status_lbl, "")
             activity_lbl = ttk.Label(row, width=16, anchor=tk.W)
             activity_lbl.pack(side=tk.LEFT)
-            loc_lbl = ttk.Label(row, width=12)
+            loc_lbl = ttk.Label(row, width=12, anchor=tk.W)
             loc_lbl.pack(side=tk.LEFT)
             cr_lbl = ttk.Label(row, width=4, anchor=tk.E)
             cr_lbl.pack(side=tk.LEFT)
             iv_lbl = ttk.Label(row, width=4, anchor=tk.E)
             iv_lbl.pack(side=tk.LEFT)
-            snd_lbl = ttk.Label(row, width=2)
+            snd_lbl = ttk.Label(row, width=2, anchor=tk.W)
             snd_lbl.pack(side=tk.LEFT)
             cpu_lbl = ttk.Label(row, width=6, anchor=tk.E)
             cpu_lbl.pack(side=tk.LEFT)
             mem_lbl = ttk.Label(row, width=6, anchor=tk.E)
             mem_lbl.pack(side=tk.LEFT)
-            pid_lbl = ttk.Label(row, width=10)
+            pid_lbl = ttk.Label(row, width=10, anchor=tk.E)
             pid_lbl.pack(side=tk.LEFT)
 
             def view_cmd(n: str = bot.name) -> None:
