@@ -70,3 +70,36 @@ def test_draw_markers_drawn_when_enabled(cfg):
     settings.set_bot_overlay("bot01", True)
     result = overlay.draw_markers(frame, 10)
     assert not np.array_equal(result, frame)
+
+
+def test_cli_toggle_and_status_act_on_display(tmp_path):
+    import os
+    import subprocess
+    import sys
+
+    env = {**os.environ, "HOME": str(tmp_path)}
+
+    def run_cli(*args):
+        return subprocess.run(
+            [sys.executable, "-m", "gt_spector.overlay", *args],
+            capture_output=True, text=True, env=env,
+        )
+
+    out = run_cli("10", "status")
+    assert out.returncode == 0
+    assert "Display 10 overlay: ON" in out.stdout
+
+    out = run_cli("10", "toggle")
+    assert out.returncode == 0
+    assert "Overlay OFF for display 10" in out.stdout
+
+    out = run_cli("10", "status")
+    assert out.returncode == 0
+    assert "Display 10 overlay: OFF" in out.stdout
+
+    per_bot_cfg = tmp_path / ".config" / "gt-spector" / "bots" / "bot01.json"
+    assert per_bot_cfg.exists()
+    assert "overlay_enabled" in per_bot_cfg.read_text()
+
+    global_cfg = tmp_path / ".config" / "gt-spector" / "settings.json"
+    assert not global_cfg.exists()

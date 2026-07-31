@@ -7,6 +7,8 @@ Usage:
   python -m gt_spector.overlay <display> mark <x> <y> [label]
   python -m gt_spector.overlay <display> clear [id]
   python -m gt_spector.overlay <display> list
+  python -m gt_spector.overlay <display> toggle
+  python -m gt_spector.overlay <display> status
 """
 
 from __future__ import annotations
@@ -192,17 +194,11 @@ def _main() -> None:
                       f"RGB({m.r},{m.g},{m.b})  label='{m.label}'")
 
     elif cmd == "toggle":
-        display_arg = sys.argv[3] if len(sys.argv) > 3 else None
-        d = int(display_arg) if display_arg is not None else None
-        state = toggle_overlay(d)
-        print(f"  Overlay {'ON' if state else 'OFF'} for {'global' if d is None else f'display {d}'}")
+        state = toggle_overlay(display)
+        print(f"  Overlay {'ON' if state else 'OFF'} for display {display}")
 
     elif cmd == "status":
-        d = int(sys.argv[3]) if len(sys.argv) > 3 else None
-        if d is None:
-            print(f"  Global overlay: {'ON' if _settings.overlay_global_enabled() else 'OFF'}")
-        else:
-            print(f"  Display {d} overlay: {'ON' if overlay_enabled(d) else 'OFF'}")
+        print(f"  Display {display} overlay: {'ON' if overlay_enabled(display) else 'OFF'}")
 
     else:
         print(f"Unknown: {cmd}")
