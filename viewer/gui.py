@@ -1,9 +1,12 @@
+import os
 import time as _time
 import tkinter as tk
 from datetime import UTC
 from tkinter import ttk
 
 from PIL import Image, ImageTk
+
+from gt_spector import audio, overlay, settings
 
 
 class ViewerWindow:
@@ -38,6 +41,16 @@ class ViewerWindow:
         file_menu.add_command(label="Quit", command=self._on_close)
         menubar.add_cascade(label="File", menu=file_menu)
 
+        overlay_menu = tk.Menu(menubar, tearoff=0)
+        self._overlay_var = tk.BooleanVar(value=overlay.overlay_enabled(self._display_num()))
+        overlay_menu.add_checkbutton(
+            label="Show Markers", variable=self._overlay_var,
+            command=self._on_overlay_toggle)
+        overlay_menu.add_command(label="List Markers", command=self._on_viewer_list_markers)
+        overlay_menu.add_command(label="Clear Markers", command=lambda: overlay.clear_markers(self._display_num()))
+        overlay_menu.add_command(label="Add Marker at Cursor", command=self._on_add_marker_at_cursor)
+        menubar.add_cascade(label="Overlay", menu=overlay_menu)
+
     def _setup_toolbar(self):
         toolbar = ttk.Frame(self._tk)
         toolbar.pack(side=tk.TOP, fill=tk.X)
@@ -54,7 +67,46 @@ class ViewerWindow:
         )
         self._fps_spin.pack(side=tk.LEFT, padx=2)
         self._fps_var.trace_add("write", lambda *a: self._on_fps_change())
+        self._game_pid = os.environ.get("GT_SPECTOR_GAME_PID")
+        self._sound_btn = ttk.Button(toolbar, text=self._sound_icon(), command=self._on_sound_toggle)
+        self._sound_btn.pack(side=tk.LEFT, padx=2)
         ttk.Button(toolbar, text="Quit", command=self._on_close).pack(side=tk.LEFT, padx=2)
+
+    def _display_num(self) -> int:
+        return int(self._session.display.lstrip(":"))
+
+    def _on_overlay_toggle(self) -> None:
+        overlay.set_overlay_enabled(self._display_num(), self._overlay_var.get())
+
+    def _on_viewer_list_markers(self) -> None:
+        win = tk.Toplevel(self._tk)
+        win.title("Markers")
+        for m in overlay.load_markers(self._display_num()):
+            ttk.Label(win, text=f"{m.id} @ ({m.x},{m.y}) label='{m.label}'").pack(anchor=tk.W)
+
+    def _on_add_marker_at_cursor(self) -> None:
+        pos = getattr(self, "_last_frame_pos", None)
+        if pos:
+            overlay.add_marker(self._display_num(), pos[0], pos[1], "cursor")
+        else:
+            import tkinter.simpledialog as sd
+            x = sd.askinteger("Add Marker", "x:", parent=self._tk)
+            y = sd.askinteger("Add Marker", "y:", parent=self._tk)
+            if x is not None and y is not None:
+                overlay.add_marker(self._display_num(), x, y)
+
+    def _sound_icon(self) -> str:
+        if self._game_pid:
+            return "🔇" if audio.is_muted(int(self._game_pid)) else "🔊"
+        return "—"
+
+    def _on_sound_toggle(self) -> None:
+        if not self._game_pid:
+            self._status.config(text="No game pid for sound control")
+            return
+        muted = audio.is_muted(int(self._game_pid))
+        audio.set_muted(int(self._game_pid), not muted)
+        self._sound_btn.config(text=self._sound_icon())
 
     def _setup_canvas(self):
         self._frame = ttk.Frame(self._tk)
@@ -92,6 +144,7 @@ class ViewerWindow:
             frame = self._session.frame
             h, w = frame.shape[:2]
             if shm_changed:
+                frame = overlay.draw_markers(frame, self._display_num())
                 self._tk.update_idletasks()
                 fw = max(self._frame.winfo_width(), 50)
                 fh = max(self._frame.winfo_height(), 50)
@@ -133,6 +186,7 @@ class ViewerWindow:
             return
         fx = int(event.x / self._scale)
         fy = int(event.y / self._scale)
+        self._last_frame_pos = (fx, fy)
         try:
             r, g, b = self._session.get_pixel(fx, fy)
             self._status.config(text=f"Pixel: ({fx}, {fy}) -> RGB({r}, {g}, {b})")
@@ -284,7 +338,7 @@ class ViewerWindow:
             self._session.attach(display, source)
             self._tk.title(f"gt-spector — {display}")
             self._status.config(text=f"Attached: {display}")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             self._status.config(text=f"Attach error: {e}")
 
     def _on_detach(self):
@@ -293,6 +347,12 @@ class ViewerWindow:
         self._status.config(text="Detached")
 
     def _on_close(self):
+        if self._game_pid:
+            try:
+                if settings.sound_mode() == "viewer":
+                    audio.set_muted(int(self._game_pid), True)
+            except (ValueError, OSError):
+                pass
         self._running = False
         self._tk.destroy()
 
