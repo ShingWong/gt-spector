@@ -9,6 +9,7 @@ from collections.abc import Callable
 from typing import Any
 
 import numpy as np
+import requests
 
 from gt_spector import logs
 
@@ -49,6 +50,22 @@ def frame_is_blank(frame: np.ndarray) -> bool:
         return True
     std = float(np.std(frame))
     return std < 0.5
+
+
+VLM_INTERVAL = 10.0
+
+
+def _downscale(frame: np.ndarray, factor: int = 4) -> np.ndarray:
+    return frame[::factor, ::factor, :3]
+
+
+def _parse_screen(content: str) -> str | None:
+    for line in content.splitlines():
+        line = line.strip()
+        if line.upper().startswith("SCREEN:"):
+            name = line.split(":", 1)[1].strip().upper()
+            return name or None
+    return None
 
 
 class BotMonitor:
@@ -104,3 +121,29 @@ class BotMonitor:
                 time.sleep(2)
         run_script(bot, script)
         return True
+
+    def should_vlm_check(self, bot: Any, now: float) -> bool:
+        last = self._last_vlm_check.get(bot.name, -1e9)
+        if (now - last) >= VLM_INTERVAL:
+            self._last_vlm_check[bot.name] = now
+            return True
+        return False
+
+    def classify_frame(self, frame: np.ndarray, display: int) -> str | None:
+        if self._vlm is None:
+            return None
+        try:
+            small = _downscale(np.asarray(frame))
+            result = self._vlm.analyze_frame(small, prompt=(
+                "Identify this Doomsday: Last Survivors screen in ONE phrase. "
+                "Format: SCREEN: <name>"), max_tokens=200)
+            content = result["choices"][0]["message"]["content"]
+            return _parse_screen(content)
+        except (KeyError, IndexError, RuntimeError, OSError, ValueError,
+                requests.exceptions.RequestException):
+            return None
+
+    def vlm_tick(self, frame: np.ndarray, bot: Any, now: float) -> str | None:
+        if not self.should_vlm_check(bot, now):
+            return None
+        return self.classify_frame(frame, bot.display)

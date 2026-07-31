@@ -61,3 +61,56 @@ def test_mark_crash_and_intervention(tmp_path, monkeypatch):
     assert bot.crash_count == 1
     m.mark_intervention(bot)
     assert bot.intervention_count == 1
+
+
+def test_should_vlm_check_throttled():
+    from gt_spector.monitor import BotMonitor
+    m = BotMonitor(None)
+    bot = type("B", (), {"name": "bot01"})()
+    now = 100.0
+    assert m.should_vlm_check(bot, now) is True
+    assert m.should_vlm_check(bot, now + 2) is False
+    assert m.should_vlm_check(bot, now + 11) is True
+
+
+def test_classify_frame_calls_vlm(monkeypatch):
+    from gt_spector import monitor
+    calls = {}
+
+    class FakeVLM:
+        def analyze_frame(self, frame, prompt=None, max_tokens=200):
+            calls["shape"] = frame.shape
+            return {"choices": [{"message": {"content": "SCREEN: ALLIANCE"}}]}
+
+    m = monitor.BotMonitor(None, vlm=FakeVLM())
+    import numpy as np
+    frame = np.zeros((864, 1152, 3), dtype=np.uint8)
+    assert m.classify_frame(frame, 10) == "ALLIANCE"
+    # 1/4 scale sent to VLM
+    assert calls["shape"] == (216, 288, 3)
+
+
+def test_classify_frame_returns_none_on_error(monkeypatch):
+    from gt_spector import monitor
+    m = monitor.BotMonitor(None, vlm=type("V", (), {"analyze_frame": lambda *a, **k: (_ for _ in ()).throw(RuntimeError())})())
+    import numpy as np
+    assert m.classify_frame(np.zeros((10, 10, 3), dtype=np.uint8), 10) is None
+
+
+def test_vlm_tick_throttles_and_classifies():
+    from gt_spector import monitor
+    calls = []
+
+    class FakeVLM:
+        def analyze_frame(self, frame, prompt=None, max_tokens=200):
+            calls.append(frame.shape)
+            return {"choices": [{"message": {"content": "SCREEN: LOBBY"}}]}
+
+    m = monitor.BotMonitor(None, vlm=FakeVLM())
+    bot = type("B", (), {"name": "bot02", "display": 10})()
+    import numpy as np
+    frame = np.zeros((864, 1152, 3), dtype=np.uint8)
+    assert m.vlm_tick(frame, bot, 100.0) == "LOBBY"
+    assert m.vlm_tick(frame, bot, 101.0) is None
+    assert m.vlm_tick(frame, bot, 111.0) == "LOBBY"
+    assert len(calls) == 2
