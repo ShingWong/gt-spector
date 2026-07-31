@@ -20,22 +20,35 @@ Reorganize the gt-spector bot console into a desktop-app-style layout (menu bar 
 
 ## Architecture
 
-### 1. Overlay settings (new, in `gt_spector/overlay.py`)
+### 1. Settings layout (hybrid: global + per-bot)
 
-Add a settings store at `~/.config/gt-spector/overlay_settings.json`:
-
-```json
-{ "global_enabled": true, "per_display": { "10": true, "11": false } }
 ```
+~/.config/gt-spector/
+  settings.json        ← global (console-only writes): overlay global_enabled, sound mode
+  bots/bot01.json      ← per-bot (console + that bot's viewer): overlay enabled, sound state
+  bots/bot02.json
+```
+
+- **Global** `settings.json`:
+  ```json
+  { "overlay_global_enabled": true, "sound_mode": "viewer" }
+  ```
+- **Per-bot** `bots/<bot_name>.json`:
+  ```json
+  { "overlay_enabled": true, "sound_muted": false }
+  ```
+- **Atomic writes everywhere** (write temp file + rename). This prevents torn reads/writes. The console (single process) is the only writer of `settings.json`; a bot's viewer is the only writer of that bot's per-bot file. A rare console↔viewer race on the same per-bot file can still lose one read-modify-write update, but this is acceptable given toggles are infrequent and the file is rewritten on every change.
+- Per-bot files are keyed by bot name, not display, so they survive display renumbering.
+- `overlay.py` maps display → bot name (via the same `9 + n` rule used by `BotManager.load_from_prefixes`; a display not matching a known bot falls back to the global flag).
 
 New functions in `overlay.py`:
 
-- `overlay_enabled(display: int) -> bool` — returns `global_enabled AND per_display[display]`
+- `overlay_enabled(display: int) -> bool` — returns `global_enabled AND per-bot enabled` (per-bot default true when unknown)
 - `set_overlay_enabled(display: int | None, enabled: bool) -> None`
-  - `display=None` sets the global flag
-  - `display=int` sets the per-display flag
+  - `display=None` sets the global flag in `settings.json`
+  - `display=int` sets that bot's flag in its per-bot file
 - `toggle_overlay(display: int | None) -> bool` — flips and returns new state
-- `_settings_path() -> Path`, `_load_settings()`, `_save_settings()` internal helpers
+- `_settings_path()` / `_bots_dir()` / `_load_global()` / `_save_global()` / `_load_bot(name)` / `_save_bot(name, data)` internal helpers
 
 `draw_markers()` is updated to return the frame unchanged when `overlay_enabled(display)` is False. The per-marker `visible` flag continues to control individual markers.
 
@@ -115,15 +128,12 @@ Each bot's game process emits audio streams via PipeWire (pipewire-pulse). Sink-
 
 ### 6. Sound mode (global setting)
 
-Stored at `~/.config/gt-spector/sound_settings.json`:
-```json
-{ "mode": "all_off" | "viewer" | "all_on" }
-```
+Stored in the global `settings.json` under `sound_mode` (`"all_off" | "viewer" | "all_on"`). Per-bot sound state lives in the per-bot file under `sound_muted` (used to restore state across console restarts in `viewer` mode).
 
 Functions in a small `sound_settings` helper (or inside `bot_manager.py`):
-- `get_sound_mode() -> str`
-- `set_sound_mode(mode: str) -> None`
-- `apply_sound_policy(bots: list[Bot]) -> None` — mutes all when `all_off`, unmutes all when `all_on`; in `viewer` mode, applies per-bot based on viewer-open state.
+- `get_sound_mode() -> str` — reads global `settings.json`
+- `set_sound_mode(mode: str) -> None` — writes global `settings.json` (atomic)
+- `apply_sound_policy(bots: list[Bot]) -> None` — mutes all when `all_off`, unmutes all when `all_on`; in `viewer` mode, applies per-bot based on per-bot `sound_muted` / viewer-open state.
 
 ### 7. Console sound integration
 
@@ -135,27 +145,27 @@ Functions in a small `sound_settings` helper (or inside `bot_manager.py`):
 ### 8. Viewer sound integration
 
 - **Sound toggle button** in the viewer toolbar: shows 🔊/🔇; clicking calls `audio.set_muted(game_pid, state)` using the `GT_SPECTOR_GAME_PID` env var.
-- **On window close**: read `sound_settings.json`; if mode == `viewer`, call `audio.set_muted(game_pid, True)` before destroying.
+- **On window close**: read global `settings.json`; if `sound_mode == "viewer"`, call `audio.set_muted(game_pid, True)` before destroying.
 - Viewer resolves game_pid from `GT_SPECTOR_GAME_PID`; if unset, skips sound control.
 
 ## Persistence
 
 All settings persist across restarts of the console, viewers, and game instances:
 
-- `~/.config/gt-spector/overlay_settings.json` — `global_enabled` + per-display flags.
-- `~/.config/gt-spector/sound_settings.json` — sound `mode`.
+- Global `~/.config/gt-spector/settings.json` — `overlay_global_enabled`, `sound_mode`.
+- Per-bot `~/.config/gt-spector/bots/<bot_name>.json` — `overlay_enabled`, `sound_muted`.
 - Settings are loaded once at console/viewer startup and written on every change (atomic write: write to temp file, then rename).
-- Per-display overlay settings persist per display number, so they survive bot restarts and console restarts.
+- Per-bot settings persist per bot name, so they survive bot restarts and console restarts.
 - Settings files are re-read by viewers when they start, so a viewer launched later reflects the current console state.
-- Corrupt/missing files fall back to defaults (overlay enabled, sound `all_off`) and are rewritten on next change.
+- Corrupt/missing files fall back to defaults (overlay enabled, sound mode `viewer` toggled per `sound_muted`) and are rewritten on next change.
 
 ## Error handling
 
-- Missing/corrupt `overlay_settings.json` → treated as all-enabled; writes recreate the file.
+- Missing/corrupt global `settings.json` or per-bot `bots/*.json` → treated as all-enabled / unmuted; writes recreate the file.
 - No checked bots → Overlay/Actions/Scripts menu items show a status message "No bots selected" instead of failing.
 - List Markers with no markers → show "No markers" in the dialog.
 - `pactl` unavailable or no sink-inputs for a bot → sound status shows "—", mute/unmute calls are no-ops.
-- Missing/corrupt `sound_settings.json` → default mode `all_off`.
+- Missing/corrupt `sound_mode` in global settings → default mode `viewer`.
 
 ## Testing
 
