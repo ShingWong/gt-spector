@@ -138,6 +138,17 @@ Functions in a small `sound_settings` helper (or inside `bot_manager.py`):
 - **On window close**: read `sound_settings.json`; if mode == `viewer`, call `audio.set_muted(game_pid, True)` before destroying.
 - Viewer resolves game_pid from `GT_SPECTOR_GAME_PID`; if unset, skips sound control.
 
+## Persistence
+
+All settings persist across restarts of the console, viewers, and game instances:
+
+- `~/.config/gt-spector/overlay_settings.json` — `global_enabled` + per-display flags.
+- `~/.config/gt-spector/sound_settings.json` — sound `mode`.
+- Settings are loaded once at console/viewer startup and written on every change (atomic write: write to temp file, then rename).
+- Per-display overlay settings persist per display number, so they survive bot restarts and console restarts.
+- Settings files are re-read by viewers when they start, so a viewer launched later reflects the current console state.
+- Corrupt/missing files fall back to defaults (overlay enabled, sound `all_off`) and are rewritten on next change.
+
 ## Error handling
 
 - Missing/corrupt `overlay_settings.json` → treated as all-enabled; writes recreate the file.
