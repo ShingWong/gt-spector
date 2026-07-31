@@ -4,7 +4,7 @@ import pytest
 
 @pytest.fixture()
 def cfg(tmp_path, monkeypatch):
-    from gt_spector import settings, overlay
+    from gt_spector import overlay, settings
     monkeypatch.setattr(settings, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(settings, "GLOBAL_PATH", tmp_path / "settings.json")
     monkeypatch.setattr(settings, "BOTS_DIR", tmp_path / "bots")
@@ -24,7 +24,7 @@ def test_overlay_enabled_per_bot_off(cfg):
 
 
 def test_overlay_enabled_both_on(cfg):
-    overlay, settings = cfg
+    overlay, _ = cfg
     assert overlay.overlay_enabled(10) is True
 
 
@@ -82,7 +82,7 @@ def test_cli_toggle_and_status_act_on_display(tmp_path):
     def run_cli(*args):
         return subprocess.run(
             [sys.executable, "-m", "gt_spector.overlay", *args],
-            capture_output=True, text=True, env=env,
+            capture_output=True, text=True, env=env, check=False,
         )
 
     out = run_cli("10", "status")

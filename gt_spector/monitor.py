@@ -54,6 +54,10 @@ def frame_is_blank(frame: np.ndarray) -> bool:
 
 VLM_INTERVAL = 10.0
 
+STARTUP_GRACE = 60.0
+
+MAX_RECOVERY_ATTEMPTS = 3
+
 
 def _downscale(frame: np.ndarray, factor: int = 4) -> np.ndarray:
     return frame[::factor, ::factor, :3]
@@ -74,6 +78,9 @@ class BotMonitor:
         self._vlm = vlm
         self._last_shm_counter: dict[str, int] = {}
         self._last_vlm_check: dict[str, float] = {}
+        self._started_at: dict[str, float] = {}
+        self._seen_pid: dict[str, int | None] = {}
+        self._recovery_attempts: dict[str, int] = {}
 
     def _read_counter(self, shm_path: str) -> int | None:
         try:
@@ -82,7 +89,17 @@ class BotMonitor:
         except (FileNotFoundError, OSError, struct.error):
             return None
 
-    def check_responsiveness(self, bot: Any) -> bool:
+    def note_running(self, bot: Any, now: float) -> None:
+        """Track when a bot's game process appeared; resets on pid change."""
+        pid = bot.pid
+        if pid != self._seen_pid.get(bot.name):
+            self._started_at[bot.name] = now
+            self._recovery_attempts.pop(bot.name, None)
+        self._seen_pid[bot.name] = pid
+
+    def check_responsiveness(self, bot: Any, now: float) -> bool:
+        if now - self._started_at.get(bot.name, now) < STARTUP_GRACE:
+            return True
         c0 = self._read_counter(bot.shm_path)
         if c0 is None:
             return False
@@ -103,6 +120,7 @@ class BotMonitor:
     def recover(self, bot: Any, run_script: Callable[[Any, Any], Any], script: Any) -> bool:
         """ESC-to-shelter, then re-run the script. Returns True on success."""
         self.mark_intervention(bot)
+        self._recovery_attempts[bot.name] = self._recovery_attempts.get(bot.name, 0) + 1
         env = {"DISPLAY": f":{bot.display}"}
         wid = self._manager._find_window(bot.display) if self._manager else None
         if wid is None:
@@ -121,6 +139,19 @@ class BotMonitor:
                 time.sleep(2)
         run_script(bot, script)
         return True
+
+    def recoveries_left(self, bot: Any) -> bool:
+        return self._recovery_attempts.get(bot.name, 0) < MAX_RECOVERY_ATTEMPTS
+
+    def recovery_succeeded(self, bot: Any) -> None:
+        self._recovery_attempts.pop(bot.name, None)
+
+    def mark_error(self, bot: Any, runner: Any) -> None:
+        """Log the fatal state and stop the script; caller sets bot.state."""
+        logs.log_bot(bot.name, "ERROR: recovery failed, script stopped")
+        stop = getattr(runner, "stop", None)
+        if callable(stop):
+            stop()
 
     def should_vlm_check(self, bot: Any, now: float) -> bool:
         last = self._last_vlm_check.get(bot.name, -1e9)

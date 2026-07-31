@@ -15,9 +15,8 @@ from __future__ import annotations
 
 import json
 import sys
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 from PIL import Image, ImageDraw
@@ -129,7 +128,6 @@ def draw_markers(frame: np.ndarray, display: int) -> np.ndarray:
 
     img = Image.fromarray(result)
     draw = ImageDraw.Draw(img)
-    h, w = result.shape[:2]
 
     for m in markers:
         if not m.visible:

@@ -149,3 +149,146 @@ def test_vlm_tick_throttles_and_classifies():
     assert m.vlm_tick(frame, bot, 101.0) is None
     assert m.vlm_tick(frame, bot, 111.0) == "LOBBY"
     assert len(calls) == 2
+
+
+def test_check_responsiveness_within_grace_missing_counter(monkeypatch):
+    from gt_spector import monitor
+    monkeypatch.setattr(monitor.time, "sleep", lambda _: None)
+    m = monitor.BotMonitor(None)
+    bot = type("B", (), {"name": "bot01", "pid": 111, "shm_path": "/nonexistent/missing-shm"})()
+    m.note_running(bot, 100.0)
+    assert m.check_responsiveness(bot, 150.0) is True
+
+
+def test_check_responsiveness_within_grace_stalled_counter(monkeypatch, tmp_path):
+    import struct
+
+    from gt_spector import monitor
+    monkeypatch.setattr(monitor.time, "sleep", lambda _: None)
+    shm = tmp_path / "frame"
+    shm.write_bytes(struct.pack("<Q", 42))
+    m = monitor.BotMonitor(None)
+    bot = type("B", (), {"name": "bot01", "pid": 111, "shm_path": str(shm)})()
+    m.note_running(bot, 100.0)
+    assert m.check_responsiveness(bot, 150.0) is True
+
+
+def test_check_responsiveness_stalled_counter_after_grace(monkeypatch, tmp_path):
+    import struct
+
+    from gt_spector import monitor
+    monkeypatch.setattr(monitor.time, "sleep", lambda _: None)
+    shm = tmp_path / "frame"
+    shm.write_bytes(struct.pack("<Q", 42))
+    m = monitor.BotMonitor(None)
+    bot = type("B", (), {"name": "bot01", "pid": 111, "shm_path": str(shm)})()
+    m.note_running(bot, 100.0)
+    assert m.check_responsiveness(bot, 161.0) is False
+
+
+def test_check_responsiveness_advancing_counter_after_grace(monkeypatch):
+    from gt_spector import monitor
+    monkeypatch.setattr(monitor.time, "sleep", lambda _: None)
+    m = monitor.BotMonitor(None)
+    values = iter([42, 43])
+    m._read_counter = lambda path: next(values)
+    bot = type("B", (), {"name": "bot01", "pid": 111, "shm_path": "/dev/shm/x"})()
+    m.note_running(bot, 100.0)
+    assert m.check_responsiveness(bot, 161.0) is True
+
+
+def test_note_running_new_pid_resets_grace(monkeypatch):
+    from gt_spector import monitor
+    monkeypatch.setattr(monitor.time, "sleep", lambda _: None)
+    m = monitor.BotMonitor(None)
+    bot = type("B", (), {"name": "bot01", "pid": 111, "shm_path": "/nonexistent/missing-shm"})()
+    m.note_running(bot, 0.0)
+    bot.pid = 222
+    m.note_running(bot, 100.0)
+    assert m.check_responsiveness(bot, 159.0) is True
+
+
+def _stub_xdotool(monkeypatch) -> None:
+    """Force recover()'s xdotool lookup to fail fast (no ESC chain)."""
+    from gt_spector import monitor
+
+    def fake_run(*args, **kwargs):
+        raise OSError("xdotool unavailable")
+
+    monkeypatch.setattr(monitor.subprocess, "run", fake_run)
+
+
+def test_recover_increments_attempts_up_to_limit(monkeypatch, tmp_path):
+    from gt_spector import logs, monitor
+    monkeypatch.setattr(logs, "LOGS_DIR", tmp_path)
+    _stub_xdotool(monkeypatch)
+    from gt_spector.bot_manager import Bot
+    bot = Bot(name="bot01", display=10)
+    m = monitor.BotMonitor(None)
+    assert m.recoveries_left(bot) is True
+    for _ in range(monitor.MAX_RECOVERY_ATTEMPTS):
+        m.recover(bot, lambda b, s: None, None)
+    assert m.recoveries_left(bot) is False
+
+
+def test_recovery_succeeded_resets_attempts(monkeypatch, tmp_path):
+    from gt_spector import logs, monitor
+    monkeypatch.setattr(logs, "LOGS_DIR", tmp_path)
+    _stub_xdotool(monkeypatch)
+    from gt_spector.bot_manager import Bot
+    bot = Bot(name="bot01", display=10)
+    m = monitor.BotMonitor(None)
+    for _ in range(monitor.MAX_RECOVERY_ATTEMPTS):
+        m.recover(bot, lambda b, s: None, None)
+    assert m.recoveries_left(bot) is False
+    m.recovery_succeeded(bot)
+    assert m.recoveries_left(bot) is True
+
+
+def test_note_running_new_pid_resets_recovery_attempts(monkeypatch, tmp_path):
+    from gt_spector import logs, monitor
+    monkeypatch.setattr(logs, "LOGS_DIR", tmp_path)
+    _stub_xdotool(monkeypatch)
+    from gt_spector.bot_manager import Bot
+    bot = Bot(name="bot01", display=10)
+    m = monitor.BotMonitor(None)
+    for _ in range(monitor.MAX_RECOVERY_ATTEMPTS):
+        m.recover(bot, lambda b, s: None, None)
+    assert m.recoveries_left(bot) is False
+    bot.pid = 999
+    m.note_running(bot, 0.0)
+    assert m.recoveries_left(bot) is True
+
+
+def test_mark_error_logs_and_stops_runner(monkeypatch, tmp_path):
+    from gt_spector import logs, monitor
+    monkeypatch.setattr(logs, "LOGS_DIR", tmp_path)
+    from gt_spector.bot_manager import Bot
+    bot = Bot(name="bot01", display=10)
+    stopped: list[str] = []
+    runner = type("R", (), {"stop": lambda self: stopped.append("stopped")})()
+    m = monitor.BotMonitor(None)
+    m.mark_error(bot, runner)
+    assert stopped == ["stopped"]
+    assert "ERROR" in (tmp_path / "bot01.log").read_text()
+
+
+def test_mark_error_runner_without_stop_noop(monkeypatch, tmp_path):
+    from gt_spector import logs, monitor
+    monkeypatch.setattr(logs, "LOGS_DIR", tmp_path)
+    from gt_spector.bot_manager import Bot
+    bot = Bot(name="bot01", display=10)
+    m = monitor.BotMonitor(None)
+    m.mark_error(bot, object())
+    assert "ERROR" in (tmp_path / "bot01.log").read_text()
+
+
+def test_refresh_state_preserves_error_state(monkeypatch):
+    from gt_spector.bot_manager import Bot, BotManager, BotState
+    bot = Bot(name="bot01")
+    bot.state = BotState.ERROR
+    bot.pid = 424242
+    m = BotManager()
+    monkeypatch.setattr(m, "_pid_alive", lambda pid: True)
+    m._refresh_state(bot)
+    assert bot.state == BotState.ERROR

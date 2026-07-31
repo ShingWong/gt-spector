@@ -3,6 +3,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
@@ -15,6 +16,25 @@ from gt_spector.bot_manager import Bot, BotManager, BotState
 from gt_spector.monitor import BotMonitor
 from gt_spector.script import ScriptRunner
 from gt_spector.scripts.help_bot import HelpBot
+
+
+class _VlmAdapter:
+    """Thin wrapper around gt_spector.vlm (WIP module); degrades to None via _make_vlm."""
+
+    def __init__(self, vlm: Any) -> None:
+        self._vlm = vlm
+
+    def analyze_frame(self, frame: Any, prompt: str | None = None,
+                      max_tokens: int = 200) -> dict[str, Any]:
+        return self._vlm.analyze_frame(frame, prompt=prompt, max_tokens=max_tokens)
+
+
+def _make_vlm() -> Any:
+    try:
+        from gt_spector import vlm
+    except Exception:  # noqa: BLE001 - WIP module; degrade to None
+        return None
+    return _VlmAdapter(vlm)
 
 
 class ToolTip:
@@ -53,9 +73,10 @@ class BotConsole:
         self._manager = BotManager()
         self._manager.load_from_prefixes()
         self._accounts = self._load_accounts()
-        self._monitor = BotMonitor(self._manager)
+        self._monitor = BotMonitor(self._manager, _make_vlm())
         self._frames: dict[str, np.ndarray | None] = {}
         self._nav_cache: dict[str, Any] | None = None
+        self._vlm_screens: dict[str, str] = {}
 
         self._tk = tk.Tk()
         self._tk.title("gt-spector — Bot Console")
@@ -66,7 +87,6 @@ class BotConsole:
         self._setup_statusbar()
         self._setup_bot_list()
 
-        self._tk.bind("<Configure>", self._on_configure)
         self._poll()
         self._tk.protocol("WM_DELETE_WINDOW", self._on_close)
 
@@ -96,11 +116,9 @@ class BotConsole:
             h = max(300, min(1500, h))
             path = self._geometry_path()
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps({"w": w, "h": h, "x": x, "y": y}))
-
-    def _on_configure(self, event: Any) -> None:
-        if event.widget == self._tk:
-            self._save_geometry()
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps({"w": w, "h": h, "x": x, "y": y}))
+            os.replace(tmp, path)
 
     def _load_accounts(self) -> dict[str, str]:
         accounts: dict[str, str] = {}
@@ -269,8 +287,10 @@ class BotConsole:
             return "●", "Running"
         if bot.state == BotState.STARTING:
             return "◐", "Starting"
-        if bot.state in (BotState.OFFLINE, BotState.ERROR):
-            return "✕", bot.state.value
+        if bot.state == BotState.ERROR:
+            return "▲", "Alert"
+        if bot.state == BotState.OFFLINE:
+            return "✕", "Offline"
         return "●", bot.state.value
 
     def _status_color(self, bot: Bot) -> str:
@@ -278,7 +298,9 @@ class BotConsole:
             return "green"
         if bot.state == BotState.STARTING:
             return "gold"
-        if bot.state in (BotState.OFFLINE, BotState.ERROR):
+        if bot.state == BotState.ERROR:
+            return "blue"
+        if bot.state == BotState.OFFLINE:
             return "red"
         return "black"
 
@@ -298,7 +320,13 @@ class BotConsole:
             return "?"
         if monitor.frame_is_blank(frame):
             return "blank"
-        return monitor.detect_screen(frame, self._nav_table())
+        loc = monitor.detect_screen(frame, self._nav_table())
+        if loc is not None:
+            return loc
+        screens = cast(dict[str, str] | None, getattr(self, "_vlm_screens", None))
+        if screens:
+            return screens.get(bot.name)
+        return None
 
     @staticmethod
     def _needs_recovery(loc: str | None, expected: str | None) -> bool:
@@ -336,6 +364,11 @@ class BotConsole:
             self._frames[bot.name] = frame
             r["status_tip"].set_text(self._status_tooltip(bot, frame))
             loc = self._detect_location(bot, frame)
+            if loc is None:
+                vlm_loc = self._monitor.vlm_tick(frame, bot, time.monotonic())
+                if vlm_loc:
+                    self._vlm_screens[bot.name] = vlm_loc
+                    loc = vlm_loc
             r["loc"].config(text=loc or "?")
             runner = self._runners.get(bot.name)
             if runner and runner.script:
@@ -569,8 +602,10 @@ class BotConsole:
         for bot in self._manager.bots:
             if bot.state != BotState.RUNNING or not bot.pid:
                 continue
+            now = time.monotonic()
+            self._monitor.note_running(bot, now)
             runner = self._runners.get(bot.name)
-            if not self._monitor.check_responsiveness(bot):
+            if not self._monitor.check_responsiveness(bot, now):
                 self._monitor.mark_crash(bot)
                 logs.log_bot(bot.name, "non-responsive, restarting game")
                 self._manager.restart_game(bot)
@@ -581,9 +616,16 @@ class BotConsole:
                 if expected:
                     loc = self._detect_location(bot, self._frames.get(bot.name))
                     if self._needs_recovery(loc, expected):
-                        logs.log_bot(bot.name, f"wrong screen {loc}, recovering")
-                        self._monitor.recover(
-                            bot, lambda b, s: self._runners[b.name].run_script(s), runner.script)
+                        if self._monitor.recoveries_left(bot):
+                            logs.log_bot(bot.name, f"wrong screen {loc}, recovering")
+                            self._monitor.recover(
+                                bot, lambda b, s: self._runners[b.name].run_script(s), runner.script)
+                        else:
+                            logs.log_bot(bot.name, "recovery exhausted, marking ERROR")
+                            self._monitor.mark_error(bot, runner)
+                            bot.state = BotState.ERROR
+                    else:
+                        self._monitor.recovery_succeeded(bot)
 
     def _poll(self) -> None:
         self._nav_cache = None
@@ -592,6 +634,7 @@ class BotConsole:
         self._tk.after(2000, self._poll)
 
     def _on_close(self) -> None:
+        self._save_geometry()
         self._manager.stop_all()
         self._tk.destroy()
 

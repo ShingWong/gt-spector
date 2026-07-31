@@ -21,7 +21,7 @@ def make_bot(state: BotState = BotState.RUNNING, name: str = "bot01") -> Bot:
         (BotState.RUNNING, ("●", "Running")),
         (BotState.STARTING, ("◐", "Starting")),
         (BotState.OFFLINE, ("✕", "Offline")),
-        (BotState.ERROR, ("✕", "Error")),
+        (BotState.ERROR, ("▲", "Alert")),
         (BotState.PAUSED, ("●", "Paused")),
     ],
 )
@@ -35,7 +35,7 @@ def test_status_glyph(state, expected):
         (BotState.RUNNING, "green"),
         (BotState.STARTING, "gold"),
         (BotState.OFFLINE, "red"),
-        (BotState.ERROR, "red"),
+        (BotState.ERROR, "blue"),
         (BotState.PAUSED, "black"),
     ],
 )
@@ -93,6 +93,217 @@ def test_detect_location_match():
         }
     }
     assert c._detect_location(make_bot(), frame) == "ALLIANCE"
+
+
+def test_detect_location_falls_back_to_vlm_cache():
+    frame = np.zeros((864, 1152, 3), dtype=np.uint8)
+    frame[545:555, 925:935] = (200, 50, 50)
+    c = make_console()
+    c._nav_table = lambda: {"states": {}}
+    c._vlm_screens = {"bot01": "ALLIANCE"}
+    assert c._detect_location(make_bot(), frame) == "ALLIANCE"
+
+
+def test_make_vlm_none_when_module_unavailable(monkeypatch):
+    import sys
+
+    from viewer.bot_console import _make_vlm
+
+    monkeypatch.setitem(sys.modules, "gt_spector.vlm", None)
+    assert _make_vlm() is None
+
+
+def test_make_vlm_adapter_wraps_module(monkeypatch):
+    import sys
+    from types import SimpleNamespace
+
+    from viewer.bot_console import _make_vlm
+
+    calls = []
+    fake = SimpleNamespace(
+        analyze_frame=lambda frame, prompt=None, max_tokens=500:
+        calls.append((frame, prompt, max_tokens)) or {})
+    monkeypatch.setitem(sys.modules, "gt_spector.vlm", fake)
+    vlm = _make_vlm()
+    assert vlm is not None
+    vlm.analyze_frame("f", prompt="P", max_tokens=200)
+    assert calls == [("f", "P", 200)]
+
+
+def test_monitor_tick_recover_when_attempts_left(tmp_path, monkeypatch):
+    from gt_spector import logs
+
+    monkeypatch.setattr(logs, "LOGS_DIR", tmp_path)
+    c = make_console()
+    bot = make_bot()
+    bot.pid = 111
+    c._manager = type("M", (), {"bots": [bot]})()
+    script = type("S", (), {"expected_screen": "ALLIANCE"})()
+    runner = type("R", (), {"script": script})()
+    runner.run_script = lambda s: None
+    c._runners = {"bot01": runner}
+    c._frames = {"bot01": None}
+    calls = {}
+
+    class FakeMonitor:
+        def note_running(self, bot, now):
+            pass
+
+        def check_responsiveness(self, bot, now):
+            return True
+
+        def recoveries_left(self, bot):
+            return True
+
+        def recover(self, bot, run_script, script):
+            calls["recover"] = (run_script, script)
+
+        def recovery_succeeded(self, bot):
+            calls["succeeded"] = True
+
+    c._monitor = FakeMonitor()
+    c._detect_location = lambda bot, frame: "LOBBY"
+    c._monitor_tick()
+    run_closure, recovered_script = calls["recover"]
+    assert recovered_script is script
+    run_closure(bot, script)
+    assert "succeeded" not in calls
+    assert bot.state == BotState.RUNNING
+
+
+def test_monitor_tick_marks_error_when_recovery_exhausted(tmp_path, monkeypatch):
+    from gt_spector import logs
+
+    monkeypatch.setattr(logs, "LOGS_DIR", tmp_path)
+    c = make_console()
+    bot = make_bot()
+    bot.pid = 111
+    c._manager = type("M", (), {"bots": [bot]})()
+    script = type("S", (), {"expected_screen": "ALLIANCE"})()
+    runner = type("R", (), {"script": script})()
+    c._runners = {"bot01": runner}
+    c._frames = {"bot01": None}
+    calls = {}
+
+    class FakeMonitor:
+        def note_running(self, bot, now):
+            pass
+
+        def check_responsiveness(self, bot, now):
+            return True
+
+        def recoveries_left(self, bot):
+            return False
+
+        def mark_error(self, bot, runner):
+            calls["marked"] = (bot, runner)
+
+    c._monitor = FakeMonitor()
+    c._detect_location = lambda bot, frame: "LOBBY"
+    c._monitor_tick()
+    assert calls["marked"] == (bot, runner)
+    assert bot.state == BotState.ERROR
+
+
+def test_monitor_tick_recovery_succeeded_on_expected_screen(tmp_path, monkeypatch):
+    from gt_spector import logs
+
+    monkeypatch.setattr(logs, "LOGS_DIR", tmp_path)
+    c = make_console()
+    bot = make_bot()
+    bot.pid = 111
+    c._manager = type("M", (), {"bots": [bot]})()
+    script = type("S", (), {"expected_screen": "ALLIANCE"})()
+    runner = type("R", (), {"script": script})()
+    c._runners = {"bot01": runner}
+    c._frames = {"bot01": None}
+    calls = {}
+
+    class FakeMonitor:
+        def note_running(self, bot, now):
+            pass
+
+        def check_responsiveness(self, bot, now):
+            return True
+
+        def recoveries_left(self, bot):
+            return True
+
+        def recovery_succeeded(self, bot):
+            calls["succeeded"] = True
+
+    c._monitor = FakeMonitor()
+    c._detect_location = lambda bot, frame: "ALLIANCE"
+    c._monitor_tick()
+    assert calls["succeeded"] is True
+    assert bot.state == BotState.RUNNING
+
+
+def test_monitor_tick_crash_restarts_game(tmp_path, monkeypatch):
+    from gt_spector import logs
+
+    monkeypatch.setattr(logs, "LOGS_DIR", tmp_path)
+    c = make_console()
+    bot = make_bot()
+    bot.pid = 111
+    calls = []
+
+    class FakeManager:
+        def __init__(self):
+            self.bots = [bot]
+
+        def restart_game(self, bot):
+            calls.append("restart")
+
+    c._manager = FakeManager()
+    c._runners = {}
+
+    class FakeMonitor:
+        def note_running(self, bot, now):
+            calls.append("note")
+
+        def check_responsiveness(self, bot, now):
+            return False
+
+        def mark_crash(self, bot):
+            calls.append("crash")
+
+        def mark_intervention(self, bot):
+            calls.append("intervention")
+
+    c._monitor = FakeMonitor()
+    c._monitor_tick()
+    assert calls.count("note") == 1
+    assert calls.count("crash") == 1
+    assert calls.count("restart") == 1
+    assert calls.count("intervention") == 1
+
+
+def test_save_geometry_atomic(tmp_path, monkeypatch):
+    import json
+    from pathlib import Path
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    c = make_console()
+    c._tk = type("Tk", (), {"geometry": lambda self: "640x480+10+20"})()
+    c._save_geometry()
+    p = tmp_path / ".config" / "gt-spector" / "console_geometry.json"
+    assert json.loads(p.read_text()) == {"w": 640, "h": 480, "x": 10, "y": 20}
+    assert not p.with_name("console_geometry.json.tmp").exists()
+
+
+def test_on_close_saves_geometry(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    c = make_console()
+    calls = []
+    c._tk = type("Tk", (), {"geometry": lambda self: "600x500+5+5",
+                            "destroy": lambda self: calls.append("destroy")})()
+    c._manager = type("M", (), {"stop_all": lambda self: calls.append("stop_all")})()
+    c._on_close()
+    assert calls == ["stop_all", "destroy"]
+    assert (tmp_path / ".config" / "gt-spector" / "console_geometry.json").exists()
 
 
 @pytest.mark.parametrize(

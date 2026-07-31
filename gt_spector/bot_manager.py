@@ -84,6 +84,8 @@ class BotManager:
             self.bots.append(bot)
 
     def _refresh_state(self, bot: Bot) -> None:
+        if bot.state == BotState.ERROR:
+            return
         if bot.pid and self._pid_alive(bot.pid):
             bot.state = BotState.RUNNING
             return
