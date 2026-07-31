@@ -15,7 +15,7 @@
 - Per-bot files keyed by bot name (NOT display).
 - Sound mode values: `"all_off" | "viewer" | "all_on"`.
 - Sound sink-inputs found via `application.process.id == game_pid`.
-- Log rotation default 500 KB, keep 2 copies (`.log`, `.log.1`); size settable in console (stored as `log_max_bytes`).
+- Log rotation default 512 KiB (512 × 1024 bytes), keep 2 copies (`.log`, `.log.1`); size settable in console (stored as `log_max_bytes`).
 - Status glyphs: ● green (Running), ◐ yellow (Starting), ✕ red (Offline/Error), ▲ blue (Alert/recovering/unrecoverable). Tooltip shows status words on mouse-over.
 - CR = crash count (game restarts this session), IV = intervention count (recoveries this session). Both in-memory only.
 - Screen fingerprints live in `nav_table.json` under `states.<NAME>.fingerprints`.
