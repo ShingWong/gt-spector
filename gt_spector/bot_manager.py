@@ -2,9 +2,9 @@ import os
 import signal
 import subprocess
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
+from typing import Any
 
 WINE_BIN = "/opt/wine-proton/bin/wine"
 BASE_DIR = "/home/swong/dls/wineprefix_bots"
@@ -53,7 +53,7 @@ class Bot:
 
 
 class BotManager:
-    def __init__(self):
+    def __init__(self) -> None:
         self.bots: list[Bot] = []
 
     def add(self, bot: Bot) -> None:
@@ -86,11 +86,33 @@ class BotManager:
     def _refresh_state(self, bot: Bot) -> None:
         if bot.pid and self._pid_alive(bot.pid):
             bot.state = BotState.RUNNING
-        elif bot.xvfb_pid and self._pid_alive(bot.xvfb_pid):
+            return
+        game_pid = self._find_game_pid(bot)
+        if game_pid is not None:
+            bot.pid = game_pid
             bot.state = BotState.RUNNING
-        else:
-            bot.state = BotState.OFFLINE
-            bot.pid = None
+            return
+        if bot.xvfb_pid and self._pid_alive(bot.xvfb_pid):
+            bot.state = BotState.RUNNING
+            return
+        bot.state = BotState.OFFLINE
+        bot.pid = None
+
+    def _find_game_pid(self, bot: Bot) -> int | None:
+        prefix = bot.prefix.encode()
+        for pid_str in os.listdir("/proc/"):
+            if not pid_str.isdigit():
+                continue
+            try:
+                cmdline = open(f"/proc/{pid_str}/cmdline", "rb").read()
+                if b"Doomsday.exe" not in cmdline or b"start.exe" in cmdline:
+                    continue
+                env = open(f"/proc/{pid_str}/environ", "rb").read()
+                if b"WINEPREFIX=" + prefix + b"\x00" in env:
+                    return int(pid_str)
+            except (FileNotFoundError, PermissionError, ProcessLookupError):
+                continue
+        return None
 
     def _pid_alive(self, pid: int) -> bool:
         try:
@@ -180,9 +202,75 @@ class BotManager:
         for bot in self.bots:
             if bot.state != BotState.OFFLINE:
                 self.stop_game(bot)
-
     def attach_viewer(self, bot: Bot) -> None:
+        env = {"DISPLAY": ":0"}
+        if bot.pid:
+            env["GT_SPECTOR_GAME_PID"] = str(bot.pid)
         subprocess.Popen(
-            ["python3", "-m", "gt_spector", "--session", f":{bot.display}"],
-            env={"DISPLAY": ":0"},
+            ["/home/swong/dls/src/gt-spector/.venv/bin/python3", "-m", "gt_spector", "--session", f":{bot.display}"],
+            env=env,
+            cwd="/home/swong/dls/src/gt-spector",
         )
+
+    # ── Stats ──────────────────────────────────────────────────────────
+    _CARD = "/sys/class/drm/card1"
+
+    def get_process_stats(self, bot: Bot) -> dict[str, Any] | None:
+        pid = self._find_game_pid(bot)
+        if pid is None:
+            return None
+        try:
+            r = subprocess.run(
+                ["ps", "-p", str(pid), "-o", "%cpu=,%mem=,rss=", "--no-headers"],
+                capture_output=True, text=True, timeout=5,
+            )
+            parts = r.stdout.strip().split()
+            if len(parts) < 3:
+                return None
+            return {"pid": pid, "cpu_percent": float(parts[0]),
+                    "mem_percent": float(parts[1]), "rss_mb": int(parts[2]) // 1024}
+        except (subprocess.TimeoutExpired, OSError, ValueError, IndexError):
+            return None
+
+    def get_gpu_stats(self) -> dict[str, Any]:
+        card = self._CARD
+        gpu_busy = 0.0
+        vram_total = 0
+        vram_used = 0
+        try:
+            with open(f"{card}/device/gpu_busy_percent") as f:
+                gpu_busy = float(f.read().strip())
+        except (FileNotFoundError, OSError, ValueError):
+            pass
+        try:
+            with open(f"{card}/device/mem_info_vram_total") as f:
+                vram_total = int(f.read().strip())
+        except (FileNotFoundError, OSError, ValueError):
+            pass
+        try:
+            with open(f"{card}/device/mem_info_vram_used") as f:
+                vram_used = int(f.read().strip())
+        except (FileNotFoundError, OSError, ValueError):
+            pass
+        return {"gpu_busy_percent": gpu_busy,
+                "vram_total_mb": vram_total // 1048576,
+                "vram_used_mb": vram_used // 1048576}
+
+    def get_system_ram(self) -> dict[str, Any]:
+        import re
+        try:
+            with open("/proc/meminfo") as f:
+                data = f.read()
+            m_total = re.search(r"MemTotal:\s+(\d+)", data)
+            m_avail = re.search(r"MemAvailable:\s+(\d+)", data)
+            total = int(m_total.group(1)) // 1024 if m_total else 0
+            available = int(m_avail.group(1)) // 1024 if m_avail else 0
+            st = re.search(r"SwapTotal:\s+(\d+)", data)
+            sf = re.search(r"SwapFree:\s+(\d+)", data)
+            swap_total = int(st.group(1)) // 1024 if st else 0
+            swap_free = int(sf.group(1)) // 1024 if sf else 0
+            return {"mem_total_mb": total, "mem_used_mb": total - available,
+                    "swap_total_mb": swap_total, "swap_used_mb": swap_total - swap_free}
+        except (FileNotFoundError, AttributeError, OSError, ValueError):
+            return {"mem_total_mb": 0, "mem_used_mb": 0,
+                    "swap_total_mb": 0, "swap_used_mb": 0}

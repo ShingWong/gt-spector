@@ -1,72 +1,207 @@
+import json
+import os
+import re
+import shutil
+import subprocess
 import tkinter as tk
+from pathlib import Path
 from tkinter import ttk
+from typing import Any, cast
 
-from gt_spector.bot_manager import BotManager, BotState
+import numpy as np
+
+from gt_spector import audio, logs, monitor, overlay, settings
+from gt_spector.bot_manager import Bot, BotManager, BotState
+from gt_spector.monitor import BotMonitor
+from gt_spector.script import ScriptRunner
+from gt_spector.scripts.help_bot import HelpBot
+
+
+class ToolTip:
+    """Simple hover tooltip for a widget."""
+
+    def __init__(self, widget: Any, text: str = "") -> None:
+        self._widget = widget
+        self._text = text
+        self._tip: tk.Toplevel | None = None
+        widget.bind("<Enter>", self._show)
+        widget.bind("<Leave>", self._hide)
+
+    def set_text(self, text: str) -> None:
+        self._text = text
+
+    def _show(self, _event: Any = None) -> None:
+        if not self._text:
+            return
+        x = self._widget.winfo_rootx() + 16
+        y = self._widget.winfo_rooty() + self._widget.winfo_height() + 4
+        self._tip = tk.Toplevel(self._widget)
+        self._tip.wm_overrideredirect(True)
+        self._tip.wm_geometry(f"+{x}+{y}")
+        lbl = ttk.Label(self._tip, text=self._text, background="#ffffe0",
+                        relief=tk.SOLID, borderwidth=1)
+        lbl.pack()
+
+    def _hide(self, _event: Any = None) -> None:
+        if self._tip is not None:
+            self._tip.destroy()
+            self._tip = None
 
 
 class BotConsole:
-    def __init__(self):
+    def __init__(self) -> None:
         self._manager = BotManager()
         self._manager.load_from_prefixes()
         self._accounts = self._load_accounts()
+        self._monitor = BotMonitor(self._manager)
 
         self._tk = tk.Tk()
         self._tk.title("gt-spector — Bot Console")
-        self._tk.geometry("600x500")
+        self._tk.geometry(self._load_geometry("600x500"))
 
         self._setup_menu()
         self._setup_toolbar()
-        self._setup_bot_list()
         self._setup_statusbar()
+        self._setup_bot_list()
 
+        self._tk.bind("<Configure>", self._on_configure)
         self._poll()
         self._tk.protocol("WM_DELETE_WINDOW", self._on_close)
 
-    def _load_accounts(self) -> dict[str, str]:
-        accounts = {}
+    def _geometry_path(self) -> Path:
+        return Path.home() / ".config" / "gt-spector" / "console_geometry.json"
+
+    def _load_geometry(self, default: str) -> str:
         try:
-            with open("/home/swong/dls/ahk/accounts") as f:
-                for i, line in enumerate(f):
-                    line = line.strip()
-                    if ":" in line:
-                        email = line.split(":")[0].strip()
-                        name = f"bot{i+1:02d}"
-                        accounts[name] = email
-        except FileNotFoundError:
+            data = json.loads(self._geometry_path().read_text())
+            w = max(400, min(2000, int(data.get("w", 600))))
+            h = max(300, min(1500, int(data.get("h", 500))))
+            x = int(data.get("x", -1))
+            y = int(data.get("y", -1))
+            if x < 0 or y < 0:
+                return f"{w}x{h}"
+            return f"{w}x{h}+{x}+{y}"
+        except (FileNotFoundError, json.JSONDecodeError, KeyError, ValueError):
+            return default
+
+    def _save_geometry(self) -> None:
+        m = re.match(r"(\d+)x(\d+)[+]?(-?\d+)?[+]?(-?\d+)?", self._tk.geometry())
+        if m:
+            w, h = int(m.group(1)), int(m.group(2))
+            x = int(m.group(3)) if m.group(3) else -1
+            y = int(m.group(4)) if m.group(4) else -1
+            w = max(400, min(2000, w))
+            h = max(300, min(1500, h))
+            path = self._geometry_path()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps({"w": w, "h": h, "x": x, "y": y}))
+
+    def _on_configure(self, event: Any) -> None:
+        if event.widget == self._tk:
+            self._save_geometry()
+
+    def _load_accounts(self) -> dict[str, str]:
+        accounts: dict[str, str] = {}
+        try:
+            for i, line in enumerate(Path("/home/swong/dls/src/ahk/accounts").read_text().splitlines()):
+                line = line.strip()
+                if ":" in line:
+                    email = line.split(":")[0].strip()
+                    name = f"bot{i + 1:02d}"
+                    accounts[name] = email
+        except (FileNotFoundError, OSError):
             pass
         return accounts
 
-    def _setup_menu(self):
+    def _setup_menu(self) -> None:
         menubar = tk.Menu(self._tk)
         self._tk.config(menu=menubar)
+
         file_menu = tk.Menu(menubar, tearoff=0)
         file_menu.add_command(label="Refresh", command=self._refresh_bots)
+        file_menu.add_command(label="Settings…", command=self._on_settings)
         file_menu.add_separator()
         file_menu.add_command(label="Quit", command=self._on_close)
         menubar.add_cascade(label="File", menu=file_menu)
 
-    def _setup_toolbar(self):
+        sel_menu = tk.Menu(menubar, tearoff=0)
+        sel_menu.add_command(label="Check All", command=self._check_all)
+        sel_menu.add_command(label="Uncheck All", command=self._uncheck_all)
+        menubar.add_cascade(label="Selection", menu=sel_menu)
+
+        act_menu = tk.Menu(menubar, tearoff=0)
+        act_menu.add_command(label="Start", command=lambda: self._action("start"))
+        act_menu.add_command(label="Stop", command=lambda: self._action("stop"))
+        act_menu.add_command(label="Restart", command=lambda: self._action("restart"))
+        act_menu.add_separator()
+        act_menu.add_command(label="Start All", command=lambda: self._action_all("start"))
+        act_menu.add_command(label="Stop All", command=lambda: self._action_all("stop"))
+        act_menu.add_command(label="Restart All", command=lambda: self._action_all("restart"))
+        menubar.add_cascade(label="Actions", menu=act_menu)
+
+        prov_menu = tk.Menu(menubar, tearoff=0)
+        prov_menu.add_command(label="Provision Bots", command=self._on_provision)
+        menubar.add_cascade(label="Provision", menu=prov_menu)
+
+        script_menu = tk.Menu(menubar, tearoff=0)
+        script_menu.add_command(label="Help Bot", command=self._start_help_bot)
+        script_menu.add_command(label="Stop Script", command=self._stop_scripts)
+        menubar.add_cascade(label="Scripts", menu=script_menu)
+
+        overlay_menu = tk.Menu(menubar, tearoff=0)
+        self._overlay_global_var = tk.BooleanVar(value=settings.overlay_global_enabled())
+        overlay_menu.add_checkbutton(
+            label="Show Overlays", variable=self._overlay_global_var,
+            command=self._on_overlay_global_toggle)
+        overlay_menu.add_command(label="Show on Checked", command=lambda: self._overlay_checked(True))
+        overlay_menu.add_command(label="Hide on Checked", command=lambda: self._overlay_checked(False))
+        overlay_menu.add_separator()
+        overlay_menu.add_command(label="Add Marker…", command=self._on_add_marker)
+        overlay_menu.add_command(label="List Markers", command=self._on_list_markers)
+        overlay_menu.add_command(label="Clear Markers on Checked", command=self._on_clear_markers)
+        menubar.add_cascade(label="Overlay", menu=overlay_menu)
+
+        sound_menu = tk.Menu(menubar, tearoff=0)
+        self._sound_mode_var = tk.StringVar(value=settings.sound_mode())
+        for label, mode in [("All Off", "all_off"), ("Viewer Control", "viewer"), ("All On", "all_on")]:
+            sound_menu.add_radiobutton(
+                label=label, value=mode, variable=self._sound_mode_var,
+                command=self._on_sound_mode)
+        menubar.add_cascade(label="Sound", menu=sound_menu)
+
+        view_menu = tk.Menu(menubar, tearoff=0)
+        view_menu.add_command(label="Open Viewers", command=self._open_viewers)
+        menubar.add_cascade(label="View", menu=view_menu)
+
+        logs_menu = tk.Menu(menubar, tearoff=0)
+        logs_menu.add_command(label="Clear Logs", command=self._clear_logs)
+        menubar.add_cascade(label="Logs", menu=logs_menu)
+
+    def _setup_toolbar(self) -> None:
         toolbar = ttk.Frame(self._tk)
         toolbar.pack(side=tk.TOP, fill=tk.X)
         for text, cmd in [
-            ("Start", lambda: self._action("start")),
-            ("Stop", lambda: self._action("stop")),
-            ("Restart", lambda: self._action("restart")),
+            ("▶ Start", lambda: self._action("start")),
+            ("■ Stop", lambda: self._action("stop")),
+            ("↻ Restart", lambda: self._action("restart")),
         ]:
             ttk.Button(toolbar, text=text, command=cmd).pack(side=tk.LEFT, padx=2)
         ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=4)
         for text, cmd in [
-            ("Start All", lambda: self._action_all("start")),
-            ("Stop All", lambda: self._action_all("stop")),
-            ("Restart All", lambda: self._action_all("restart")),
+            ("▶▶ Start All", lambda: self._action_all("start")),
+            ("■■ Stop All", lambda: self._action_all("stop")),
+            ("↻↻ Restart All", lambda: self._action_all("restart")),
         ]:
             ttk.Button(toolbar, text=text, command=cmd).pack(side=tk.LEFT, padx=2)
         ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=4)
-        ttk.Button(toolbar, text="Provision", command=self._on_provision).pack(side=tk.LEFT, padx=2)
-        ttk.Button(toolbar, text="Check All", command=self._check_all).pack(side=tk.LEFT, padx=2)
-        ttk.Button(toolbar, text="Uncheck All", command=self._uncheck_all).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Help Bot", command=self._start_help_bot).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Stop Script", command=self._stop_scripts).pack(side=tk.LEFT, padx=2)
+        ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=4)
+        ttk.Button(toolbar, text="Clear Status",
+                   command=lambda: self._status.config(text="Ready")).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Clear Logs", command=self._clear_logs).pack(side=tk.LEFT, padx=2)
 
-    def _setup_bot_list(self):
+    def _setup_bot_list(self) -> None:
         frame = ttk.Frame(self._tk)
         frame.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
         ttk.Label(frame, text="Bots", font=("", 11, "bold")).pack(anchor=tk.W)
@@ -78,10 +213,11 @@ class BotConsole:
         canvas.configure(yscrollcommand=scroll.set)
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scroll.pack(side=tk.RIGHT, fill=tk.Y)
-        self._rows: dict[str, dict] = {}
+        self._rows: dict[str, dict[str, Any]] = {}
+        self._runners: dict[str, ScriptRunner] = {}
         self._build_rows()
 
-    def _build_rows(self):
+    def _build_rows(self) -> None:
         for w in self._list_frame.winfo_children():
             w.destroy()
         self._rows.clear()
@@ -90,67 +226,283 @@ class BotConsole:
             row.pack(fill=tk.X, pady=2)
             var = tk.BooleanVar()
             ttk.Checkbutton(row, variable=var, width=2).pack(side=tk.LEFT)
-            ttk.Label(row, width=2).pack(side=tk.LEFT)  # icon placeholder
             ttk.Label(row, text=bot.name, width=8).pack(side=tk.LEFT)
             acct = self._accounts.get(bot.name, "")
-            ttk.Label(row, text=acct, width=20).pack(side=tk.LEFT)
-            ttk.Label(row, text=f":{bot.display}", width=6).pack(side=tk.LEFT)
-            state_lbl = ttk.Label(row, width=10)
-            state_lbl.pack(side=tk.LEFT)
-            pid_lbl = ttk.Label(row, width=12)
+            ttk.Label(row, text=acct, width=18, anchor=tk.W).pack(side=tk.LEFT)
+            ttk.Label(row, text=f":{bot.display}", width=5).pack(side=tk.LEFT)
+            status_lbl = ttk.Label(row, width=9)
+            status_lbl.pack(side=tk.LEFT)
+            status_tip = ToolTip(status_lbl, "")
+            activity_lbl = ttk.Label(row, width=16, anchor=tk.W)
+            activity_lbl.pack(side=tk.LEFT)
+            loc_lbl = ttk.Label(row, width=12)
+            loc_lbl.pack(side=tk.LEFT)
+            cr_lbl = ttk.Label(row, width=4, anchor=tk.E)
+            cr_lbl.pack(side=tk.LEFT)
+            iv_lbl = ttk.Label(row, width=4, anchor=tk.E)
+            iv_lbl.pack(side=tk.LEFT)
+            snd_lbl = ttk.Label(row, width=2)
+            snd_lbl.pack(side=tk.LEFT)
+            cpu_lbl = ttk.Label(row, width=6, anchor=tk.E)
+            cpu_lbl.pack(side=tk.LEFT)
+            mem_lbl = ttk.Label(row, width=6, anchor=tk.E)
+            mem_lbl.pack(side=tk.LEFT)
+            pid_lbl = ttk.Label(row, width=10)
             pid_lbl.pack(side=tk.LEFT)
-            ttk.Button(row, text="View", width=6,
-                       command=lambda n=bot.name: self._on_view(n)).pack(side=tk.RIGHT, padx=2)
-            self._rows[bot.name] = {"var": var, "state": state_lbl, "pid": pid_lbl}
+
+            def view_cmd(n: str = bot.name) -> None:
+                self._on_view(n)
+
+            ttk.Button(row, text="View", width=5, command=view_cmd).pack(side=tk.RIGHT, padx=1)
+            self._rows[bot.name] = {
+                "var": var, "status": status_lbl, "status_tip": status_tip,
+                "activity": activity_lbl, "loc": loc_lbl, "cr": cr_lbl,
+                "iv": iv_lbl, "snd": snd_lbl, "cpu": cpu_lbl, "mem": mem_lbl,
+                "pid": pid_lbl,
+            }
         self._update_rows()
 
-    def _update_rows(self):
+    def _status_glyph(self, bot: Bot) -> tuple[str, str]:
+        if bot.state == BotState.RUNNING:
+            return "●", "Running"
+        if bot.state == BotState.STARTING:
+            return "◐", "Starting"
+        if bot.state in (BotState.OFFLINE, BotState.ERROR):
+            return "✕", bot.state.value
+        return "●", bot.state.value
+
+    def _status_color(self, bot: Bot) -> str:
+        if bot.state == BotState.RUNNING:
+            return "green"
+        if bot.state == BotState.STARTING:
+            return "gold"
+        if bot.state in (BotState.OFFLINE, BotState.ERROR):
+            return "red"
+        return "black"
+
+    def _status_tooltip(self, bot: Bot) -> str:
+        runner = self._runners.get(bot.name)
+        script = runner.script.name if runner and runner.script else ""
+        loc = self._detect_location(bot, self._read_frame(bot.display))
+        base = f"{bot.state.value} — {script or 'no script'}, in {loc or '?'}"
+        if getattr(bot, "intervention_count", 0) > 0:
+            base += f", {bot.intervention_count} interventions"
+        return base
+
+    def _detect_location(self, bot: Bot, frame: Any) -> str | None:
+        if frame is None:
+            return "?"
+        if monitor.frame_is_blank(frame):
+            return "blank"
+        return monitor.detect_screen(frame, self._nav_table())
+
+    def _nav_table(self) -> dict[str, Any]:
+        p = Path("~/.config/gt-spector/nav_table.json").expanduser()
+        try:
+            return cast(dict[str, Any], json.loads(p.read_text()))
+        except (FileNotFoundError, json.JSONDecodeError):
+            return {"states": {}}
+
+    def _update_rows(self) -> None:
+        gpu = self._manager.get_gpu_stats()
+        ram = self._manager.get_system_ram()
+        total_cpu = 0.0
+        total_mem = 0
+        running_count = 0
         for bot in self._manager.bots:
             r = self._rows.get(bot.name)
             if not r:
                 continue
             self._manager._refresh_state(bot)
-            r["state"].config(text=bot.state.value)
-            r["pid"].config(text=f"PID {bot.pid}" if bot.pid else "")
+            glyph, state_text = self._status_glyph(bot)
+            r["status"].config(text=f"{glyph} {state_text}", foreground=self._status_color(bot))
+            r["status_tip"].set_text(self._status_tooltip(bot))
+            frame = self._read_frame(bot.display)
+            loc = self._detect_location(bot, frame)
+            r["loc"].config(text=loc or "?")
+            runner = self._runners.get(bot.name)
+            if runner and runner.script:
+                status = None
+                if frame is not None:
+                    status = runner.tick(frame)
+                r["activity"].config(text=f"{runner.script.name}:{status or 'running'}")
+            else:
+                r["activity"].config(text="")
+            r["cr"].config(text=str(bot.crash_count))
+            r["iv"].config(text=str(bot.intervention_count))
+            muted = audio.is_muted(bot.pid) if bot.pid else None
+            r["snd"].config(text="🔇" if muted is True else "🔊" if muted is False else "—")
+            if bot.state == BotState.RUNNING:
+                running_count += 1
+                s = self._manager.get_process_stats(bot)
+                if s:
+                    r["cpu"].config(text=f"{s['cpu_percent']:.0f}")
+                    r["mem"].config(text=f"{s['rss_mb']}M")
+                    r["pid"].config(text=str(s['pid']))
+                    total_cpu += s['cpu_percent']
+                    total_mem += s['rss_mb']
+                else:
+                    r["cpu"].config(text="")
+                    r["mem"].config(text="")
+                    r["pid"].config(text=str(bot.pid) if bot.pid else "")
+            else:
+                r["cpu"].config(text="")
+                r["mem"].config(text="")
+                r["pid"].config(text=str(bot.pid) if bot.pid else "")
+        self._status.config(
+            text=f"GPU {gpu['gpu_busy_percent']:.0f}%  "
+                 f"VRAM {gpu['vram_used_mb']}/{gpu['vram_total_mb']}M  "
+                 f"RAM {ram['mem_used_mb']}/{ram['mem_total_mb']}M  "
+                 f"Swap {ram['swap_used_mb']}/{ram['swap_total_mb']}M  "
+                 f"| {running_count} bots  "
+                 f"CPU {total_cpu:.0f}%  MEM {total_mem}M"
+        )
 
-    def _get_checked(self):
+    def _read_frame(self, display: int) -> np.ndarray | None:
+        import mmap
+        import struct
+
+        try:
+            with open(f"/dev/shm/gt-spector-{display}-frame", "r+b") as f:
+                mm = mmap.mmap(f.fileno(), 0)
+                _c, w, h = struct.unpack("<QII", mm[:16])
+                data = np.frombuffer(mm, dtype=np.uint8, offset=16).copy().reshape(h, w, 4)
+                mm.close()
+                return data
+        except (FileNotFoundError, OSError, struct.error):
+            return None
+
+    def _on_overlay_global_toggle(self) -> None:
+        overlay.set_overlay_enabled(None, self._overlay_global_var.get())
+        logs.log_system(f"overlay global = {self._overlay_global_var.get()}")
+
+    def _overlay_checked(self, enabled: bool) -> None:
+        for bot in self._get_checked():
+            overlay.set_overlay_enabled(bot.display, enabled)
+            logs.log_system(f"overlay {bot.name} = {enabled}")
+
+    def _on_add_marker(self) -> None:
+        import tkinter.simpledialog as sd
+
+        x = sd.askinteger("Add Marker", "x:", parent=self._tk)
+        if x is None:
+            return
+        y = sd.askinteger("Add Marker", "y:", parent=self._tk)
+        if y is None:
+            return
+        label = sd.askstring("Add Marker", "label (optional):", parent=self._tk) or ""
+        for bot in self._get_checked():
+            overlay.add_marker(bot.display, x, y, label)
+        self._status.config(text=f"Markers added to {len(self._get_checked())} bots")
+
+    def _on_list_markers(self) -> None:
+        win = tk.Toplevel(self._tk)
+        win.title("Markers")
+        for bot in self._get_checked():
+            ttk.Label(win, text=f"=== {bot.name} ===", font=("", 10, "bold")).pack(anchor=tk.W)
+            markers = overlay.load_markers(bot.display)
+            if not markers:
+                ttk.Label(win, text="  No markers").pack(anchor=tk.W)
+            for m in markers:
+                ttk.Label(win, text=f"  {m.id} @ ({m.x},{m.y}) label='{m.label}'").pack(anchor=tk.W)
+
+    def _on_clear_markers(self) -> None:
+        for bot in self._get_checked():
+            overlay.clear_markers(bot.display)
+        self._status.config(text="Markers cleared")
+
+    def _on_sound_mode(self) -> None:
+        settings.set_sound_mode(self._sound_mode_var.get())
+        self._apply_sound_policy()
+        logs.log_system(f"sound mode = {settings.sound_mode()}")
+
+    def _apply_sound_policy(self) -> None:
+        mode = settings.sound_mode()
+        for bot in self._manager.bots:
+            if mode == "all_off" and bot.pid:
+                audio.set_muted(bot.pid, True)
+            elif mode == "all_on" and bot.pid:
+                audio.set_muted(bot.pid, False)
+            # viewer mode: per-bot sound_muted governs; viewers set it directly
+
+    def _open_viewers(self) -> None:
+        for bot in self._get_checked():
+            self._manager.attach_viewer(bot)
+        self._status.config(text="Viewers opened")
+
+    def _clear_logs(self) -> None:
+        logs.clear_all_logs()
+        self._status.config(text="Logs cleared")
+
+    def _on_settings(self) -> None:
+        import tkinter.simpledialog as sd
+
+        cur = settings.log_max_bytes() // 1024
+        val = sd.askinteger("Settings", "Log rotation size (KB):", parent=self._tk,
+                            initialvalue=cur, minvalue=1)
+        if val:
+            settings.set_log_max_bytes(val * 1024)
+            logs.log_system(f"log_max_bytes = {val * 1024}")
+
+    def _start_help_bot(self) -> None:
+        for bot in self._get_checked():
+            if bot.name in self._runners:
+                self._runners[bot.name].stop()
+            self._status.config(text=f"Navigating {bot.name} to alliance...")
+            self._tk.update()
+            ok = HelpBot.navigate_to_alliance(bot.display)
+            if not ok:
+                self._status.config(text=f"Failed to navigate {bot.name}")
+                continue
+            runner = ScriptRunner(bot.display, None, None, None)
+            runner.start(HelpBot())
+            self._runners[bot.name] = runner
+            self._status.config(text=f"Help bot running on {bot.name}")
+
+    def _stop_scripts(self) -> None:
+        for bot in self._get_checked():
+            runner = self._runners.pop(bot.name, None)
+            if runner:
+                runner.stop()
+        self._status.config(text="Scripts stopped")
+
+    def _get_checked(self) -> list[Bot]:
         return [b for b in self._manager.bots
                 if self._rows.get(b.name, {}).get("var", tk.BooleanVar()).get()]
 
-    def _check_all(self):
+    def _check_all(self) -> None:
         for r in self._rows.values():
             r["var"].set(True)
 
-    def _uncheck_all(self):
+    def _uncheck_all(self) -> None:
         for r in self._rows.values():
             r["var"].set(False)
 
-    def _on_view(self, name: str):
+    def _on_view(self, name: str) -> None:
         bot = self._manager.get(name)
         if bot:
             self._manager.attach_viewer(bot)
             self._status.config(text=f"Viewer opened for {name}")
 
-    def _action(self, action: str):
+    def _action(self, action: str) -> None:
         for bot in self._get_checked():
             try:
                 getattr(self._manager, f"{action}_game")(bot)
-            except Exception as e:
+            except (OSError, RuntimeError) as e:
                 self._status.config(text=f"Error on {bot.name}: {e}")
         self._update_rows()
 
-    def _action_all(self, action: str):
+    def _action_all(self, action: str) -> None:
         for bot in self._manager.bots:
             try:
                 getattr(self._manager, f"{action}_game")(bot)
-            except Exception as e:
+            except (OSError, RuntimeError) as e:
                 self._status.config(text=f"Error on {bot.name}: {e}")
         self._update_rows()
 
-    def _on_provision(self):
+    def _on_provision(self) -> None:
         self._status.config(text="Provisioning bots from accounts file...")
         self._tk.update()
-        import subprocess, os, shutil
         base = "/home/swong/dls/wineprefix_bots"
         for entry in os.listdir(base):
             shutil.rmtree(os.path.join(base, entry), ignore_errors=True)
@@ -161,7 +513,6 @@ class BotConsole:
         for name, email in self._accounts.items():
             self._status.config(text=f"Building {name} ({email})...")
             self._tk.update()
-            # Determine which reg file to use
             account_num = int(name.replace("bot", ""))
             if account_num == 1:
                 reg = "/tmp/igg_sr04_full.reg"
@@ -172,28 +523,49 @@ class BotConsole:
             r = subprocess.run(
                 ["python3", "-m", "gt_spector.provision", "init", name,
                  "--account", email] + (["--reg", reg] if reg and os.path.exists(reg) else []),
-                capture_output=True, text=True, timeout=120)
+                capture_output=True, text=True, timeout=120, check=False)
             self._status.config(text=f"{name}: {r.stdout.strip()[-60:]}")
             self._tk.update()
         self._status.config(text="Provisioning complete")
         self._refresh_bots()
 
-    def _refresh_bots(self):
+    def _refresh_bots(self) -> None:
         self._manager.load_from_prefixes()
         self._build_rows()
         self._status.config(text=f"Refreshed: {len(self._manager.bots)} bots")
 
-    def _setup_statusbar(self):
+    def _setup_statusbar(self) -> None:
         self._status = ttk.Label(self._tk, text="Ready", relief=tk.SUNKEN, anchor=tk.W)
         self._status.pack(side=tk.BOTTOM, fill=tk.X)
 
-    def _on_close(self):
-        self._manager.stop_all()
-        self._tk.destroy()
+    def _monitor_tick(self) -> None:
+        for bot in self._manager.bots:
+            if bot.state != BotState.RUNNING or not bot.pid:
+                continue
+            runner = self._runners.get(bot.name)
+            if not self._monitor.check_responsiveness(bot):
+                self._monitor.mark_crash(bot)
+                logs.log_bot(bot.name, "non-responsive, restarting game")
+                self._manager.restart_game(bot)
+                self._monitor.mark_intervention(bot)
+                continue
+            if runner and runner.script:
+                expected = getattr(runner.script, "expected_screen", None)
+                frame = self._read_frame(bot.display)
+                if expected:
+                    loc = self._detect_location(bot, frame)
+                    if loc not in (None, expected):
+                        logs.log_bot(bot.name, f"wrong screen {loc}, recovering")
+                        self._monitor.recover(
+                            bot, lambda b, s: self._runners[b.name].run_script(s), runner.script)
 
-    def _poll(self):
+    def _poll(self) -> None:
         self._update_rows()
+        self._monitor_tick()
         self._tk.after(2000, self._poll)
 
-    def run(self):
+    def _on_close(self) -> None:
+        self._tk.destroy()
+
+    def run(self) -> None:
         self._tk.mainloop()
