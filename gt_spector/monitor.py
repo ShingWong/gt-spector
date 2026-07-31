@@ -1,0 +1,106 @@
+"""Bot health monitoring: screen detection, responsiveness, recovery."""
+
+from __future__ import annotations
+
+import struct
+import subprocess
+import time
+from collections.abc import Callable
+from typing import Any
+
+import numpy as np
+
+from gt_spector import logs
+
+
+def _in_range(val: int, rng: tuple[int, int]) -> bool:
+    return rng[0] <= val <= rng[1]
+
+
+def detect_screen(frame: np.ndarray, nav_table: dict[str, Any]) -> str | None:
+    """Return the first state whose fingerprints all match the frame, else None."""
+    states: dict[str, Any] = nav_table.get("states", {})
+    for name, data in states.items():
+        fps = data.get("fingerprints", [])
+        if not fps:
+            continue
+        ok = True
+        for fp in fps:
+            try:
+                x, y = int(fp["x"]), int(fp["y"])
+                if not (0 <= x < frame.shape[1] and 0 <= y < frame.shape[0]):
+                    ok = False
+                    break
+                r, g, b = int(frame[y, x, 0]), int(frame[y, x, 1]), int(frame[y, x, 2])
+                if not (_in_range(r, fp["r"]) and _in_range(g, fp["g"]) and _in_range(b, fp["b"])):
+                    ok = False
+                    break
+            except (KeyError, TypeError, IndexError, ValueError):
+                ok = False
+                break
+        if ok:
+            return name
+    return None
+
+
+def frame_is_blank(frame: np.ndarray) -> bool:
+    """True if the frame is uniform (all-near-black or all-white)."""
+    if frame.size == 0:
+        return True
+    std = float(np.std(frame))
+    return std < 0.5
+
+
+class BotMonitor:
+    def __init__(self, manager: Any, vlm: Any = None):
+        self._manager = manager
+        self._vlm = vlm
+        self._last_shm_counter: dict[str, int] = {}
+        self._last_vlm_check: dict[str, float] = {}
+
+    def _read_counter(self, shm_path: str) -> int | None:
+        try:
+            with open(shm_path, "rb") as f:
+                return int(struct.unpack("<Q", f.read(8))[0])
+        except (FileNotFoundError, OSError, struct.error):
+            return None
+
+    def check_responsiveness(self, bot: Any) -> bool:
+        c0 = self._read_counter(bot.shm_path)
+        if c0 is None:
+            return False
+        time.sleep(0.4)
+        c1 = self._read_counter(bot.shm_path)
+        if c1 is None:
+            return False
+        return c1 != c0
+
+    def mark_crash(self, bot: Any) -> None:
+        bot.crash_count += 1
+        logs.log_bot(bot.name, f"CRASH restart (count={bot.crash_count})")
+
+    def mark_intervention(self, bot: Any) -> None:
+        bot.intervention_count += 1
+        logs.log_bot(bot.name, f"INTERVENTION recovery (count={bot.intervention_count})")
+
+    def recover(self, bot: Any, run_script: Callable[[Any, Any], Any], script: Any) -> bool:
+        """ESC-to-shelter, then re-run the script. Returns True on success."""
+        self.mark_intervention(bot)
+        env = {"DISPLAY": f":{bot.display}"}
+        wid = self._manager._find_window(bot.display) if self._manager else None
+        if wid is None:
+            try:
+                r = subprocess.run(
+                    ["xdotool", "search", "--name", "Doomsday: Last Survivors"],
+                    capture_output=True, text=True, env=env, timeout=5, check=False,
+                )
+                wid = r.stdout.strip().split()[0] if r.stdout.strip() else None
+            except (OSError, subprocess.SubprocessError):
+                wid = None
+        if wid:
+            for _ in range(8):
+                subprocess.run(["xdotool", "key", "--window", wid, "Escape"],
+                               capture_output=True, env=env, timeout=5, check=False)
+                time.sleep(2)
+        run_script(bot, script)
+        return True

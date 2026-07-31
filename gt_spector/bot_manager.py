@@ -29,6 +29,8 @@ class Bot:
     shm_id: int = 9
     script_paused: bool = False
     xvfb_pid: int | None = None
+    crash_count: int = 0
+    intervention_count: int = 0
 
     @property
     def game_dir(self) -> str:
