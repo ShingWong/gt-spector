@@ -1015,6 +1015,131 @@ git commit -m "feat: screen monitor with responsiveness check and recovery"
 
 ---
 
+### Task 5b: VLM screen classification (throttled round-robin)
+
+**Files:**
+- Modify: `gt_spector/monitor.py` (add VLM path)
+- Modify: `viewer/bot_console.py` (wire into poll loop; done with Task 6)
+- Test: `tests/test_monitor.py` (add VLM tests)
+
+**Interfaces:**
+- Consumes: `Bot` (display), existing `gt_spector/vlm.py` (`analyze_frame`), `settings`.
+- Produces:
+  - `BotMonitor.should_vlm_check(bot, now) -> bool` — True once per `VLM_INTERVAL` (10s) per bot.
+  - `BotMonitor.classify_frame(frame, display) -> str | None` — sends a 1/4-scale frame via `vlm.analyze_frame`, returns parsed screen name or None on failure.
+  - `BotMonitor.vlm_tick(frame, bot) -> str | None` — orchestrates throttling: returns new location or None if skipped.
+  - `VLM_INTERVAL = 10.0` constant.
+
+- [ ] **Step 1: Write the failing test**
+
+Append to `tests/test_monitor.py`:
+
+```python
+def test_should_vlm_check_throttled():
+    from gt_spector.monitor import BotMonitor
+    m = BotMonitor(None)
+    bot = type("B", (), {"name": "bot01"})()
+    now = 100.0
+    assert m.should_vlm_check(bot, now) is True
+    assert m.should_vlm_check(bot, now + 2) is False
+    assert m.should_vlm_check(bot, now + 11) is True
+
+
+def test_classify_frame_calls_vlm(monkeypatch):
+    from gt_spector import monitor
+    calls = {}
+
+    class FakeVLM:
+        def analyze_frame(self, frame, prompt=None, max_tokens=200):
+            calls["shape"] = frame.shape
+            return {"choices": [{"message": {"content": "SCREEN: ALLIANCE"}}]}
+
+    m = monitor.BotMonitor(None, vlm=FakeVLM())
+    import numpy as np
+    frame = np.zeros((864, 1152, 3), dtype=np.uint8)
+    assert m.classify_frame(frame, 10) == "ALLIANCE"
+    # 1/4 scale sent to VLM
+    assert calls["shape"] == (216, 288, 3)
+
+
+def test_classify_frame_returns_none_on_error(monkeypatch):
+    from gt_spector import monitor
+    m = monitor.BotMonitor(None, vlm=type("V", (), {"analyze_frame": lambda *a, **k: (_ for _ in ()).throw(RuntimeError())})())
+    import numpy as np
+    assert m.classify_frame(np.zeros((10, 10, 3), dtype=np.uint8), 10) is None
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `pytest tests/test_monitor.py -v -k "vlm or throttled"`
+Expected: FAIL (`should_vlm_check`/`classify_frame` not defined)
+
+- [ ] **Step 3: Write minimal implementation**
+
+Append to `gt_spector/monitor.py`:
+
+```python
+VLM_INTERVAL = 10.0
+
+
+def _downscale(frame: np.ndarray, factor: int = 4) -> np.ndarray:
+    h, w = frame.shape[:2]
+    return frame[::factor, ::factor, :3]
+
+
+def _parse_screen(content: str) -> Optional[str]:
+    for line in content.splitlines():
+        line = line.strip()
+        if line.upper().startswith("SCREEN:"):
+            name = line.split(":", 1)[1].strip().upper()
+            return name or None
+    return None
+
+
+class BotMonitor:
+    # ... existing class ... add below the recover method:
+
+    def should_vlm_check(self, bot, now: float) -> bool:
+        last = self._last_vlm_check.get(bot.name, -1e9)
+        return (now - last) >= VLM_INTERVAL
+
+    def classify_frame(self, frame, display: int) -> Optional[str]:
+        if self._vlm is None:
+            return None
+        try:
+            import numpy as np
+            small = _downscale(np.asarray(frame))
+            result = self._vlm.analyze_frame(small, prompt=(
+                "Identify this Doomsday: Last Survivors screen in ONE phrase. "
+                "Format: SCREEN: <name>"), max_tokens=200)
+            content = result["choices"][0]["message"]["content"]
+            return _parse_screen(content)
+        except (KeyError, IndexError, RuntimeError, OSError, ValueError):
+            return None
+
+    def vlm_tick(self, frame, bot, now: float) -> Optional[str]:
+        if not self.should_vlm_check(bot, now):
+            return None
+        self._last_vlm_check[bot.name] = now
+        return self.classify_frame(frame, bot.display)
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `pytest tests/test_monitor.py -v`
+Expected: PASS (all monitor tests)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add tests/test_monitor.py gt_spector/monitor.py
+git commit -m "feat: throttled VLM screen classification"
+```
+
+Note: the console wiring (`vlm_tick` called from the poll loop, only when a VLM is available and the fingerprint result is `?`) is implemented in Task 6.
+
+---
+
 ### Task 6: Console reorganization + status columns (`viewer/bot_console.py`)
 
 **Files:**
@@ -1627,4 +1752,4 @@ git commit -m "feat: viewer overlay menu, sound toggle, mute on close"
 ## Self-Review Notes
 
 - Spec coverage: overlay control (T1/T2/T6/T7), sound control (T3/T6/T7), menu reorg + icon bar (T6), status columns incl. glyphs/tooltip (T6), CR/IV (T5/T6), monitoring/recovery (T5/T6), logging (T4/T6), settings persistence (T1/T2/T6).
-- Deferred/not-covered: VLM round-robin screen checks (Task 5 implements `detect_screen` via fingerprints; the throttled VLM 1/4-scale path is noted but not fully implemented — flagged as a follow-up), `apply_sound_policy` viewer-mode per-bot wiring (partial in T6).
+- Deferred/not-covered: `apply_sound_policy` viewer-mode per-bot wiring is partial in Task 6 (viewers set their own `sound_muted` directly; the console re-applies on mode change).
