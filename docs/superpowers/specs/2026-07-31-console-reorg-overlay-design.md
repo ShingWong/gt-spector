@@ -165,12 +165,22 @@ New bot row layout:
 
 | Column | Content |
 |--------|---------|
-| **Status** | ● green (Running), ● yellow (Starting), ✕ red (Offline/Error) + state text |
+| **Status** | Color/shape-coded indicator + state text: ● green circle (Running), ◐ yellow half-circle (Starting), ✕ red X (Offline/Error), ▲ blue triangle (Alert: recovering / unable to recover). Mouse-over shows a tooltip with the full status wording. |
 | **Activity** | What the bot is doing: script name + tick status (e.g., `help-bot:badge_info`), or blank |
 | **Location** | Current screen (ALLIANCE, LOBBY, EXIT, …), `?` if unknown, `blank` for blank/crash frames |
 | **CR** | Crash count (game restarts this session, in-memory) |
 | **IV** | Intervention count (recoveries this session, in-memory) |
 | snd | 🔊 / 🔇 / — |
+
+#### Status indicator glyphs
+
+- ● green — `RUNNING`
+- ◐ yellow — `STARTING`
+- ✕ red — `OFFLINE` / `ERROR`
+- ▲ blue — `ALERT` (recovering via ESC-to-shelter, or unable to recover after retries)
+- Tooltip (mouse-over) shows a short status sentence, e.g. "Running — help-bot, in ALLIANCE", "Alert: recovering — re-running help-bot", "Offline".
+
+The blue ▲ overrides the base state when the bot is in a recovery/alert condition; the underlying state still shows in the tooltip.
 
 ### 10. Screen monitor (`gt_spector/monitor.py`)
 
@@ -189,6 +199,7 @@ New bot row layout:
   3. Re-run the script that was running (e.g., HelpBot navigates to alliance and resumes)
 - If the game is non-responsive or shows a crash dialog → full game restart (increment CR, log event).
 - Recovery actions run on the console poll loop so they don't require extra threads.
+- While recovering (or when recovery failed after retries), the bot's status shows the blue ▲ ALERT glyph with a tooltip describing the condition.
 
 ## Logging
 
@@ -234,7 +245,8 @@ All settings persist across restarts of the console, viewers, and game instances
 - Missing/corrupt `sound_mode` in global settings → default mode `viewer`.
 - VLM unavailable (server down) → monitor skips VLM checks, falls back to pixel fingerprints only; no crash loop.
 - Log file write failures (permissions/disk) → logged to stderr, never raises in the UI.
-- Recovery failing repeatedly for a bot → stop the script, mark bot state `ERROR`, log; do not loop forever.
+- Recovery failing repeatedly for a bot → stop the script, mark bot state `ERROR` (shown as blue ▲ ALERT), log; do not loop forever.
+- Tooltip helper: a small `ToolTip` widget (Tkinter) attached to the status cell, populated each poll from the current status text; hides on leave.
 
 ## Testing
 
