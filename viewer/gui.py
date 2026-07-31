@@ -7,6 +7,7 @@ from tkinter import ttk
 from PIL import Image, ImageTk
 
 from gt_spector import audio, overlay, settings
+from viewer.tooltip import ToolTip
 
 
 class ViewerWindow:
@@ -24,6 +25,8 @@ class ViewerWindow:
         self._drag_start = None
         self._is_dragging = False
         self._handling_release = False
+        self._marker_pick_mode = False
+        self._skip_release = False
         self._tk.geometry("1152x914")
         self._scale = 1.0
         self._frame_counter = 0
@@ -46,18 +49,34 @@ class ViewerWindow:
         overlay_menu.add_checkbutton(
             label="Show Markers", variable=self._overlay_var,
             command=self._on_overlay_toggle)
+        overlay_menu.add_separator()
+        overlay_menu.add_command(
+            label="Set Marker with Mouse", command=self._on_set_marker_with_mouse)
+        overlay_menu.add_command(
+            label="Add Marker at Location...", command=self._on_add_marker_at_location)
+        overlay_menu.add_command(
+            label="Clear Last Marker", command=self._on_clear_last_marker)
+        overlay_menu.add_command(
+            label="Clear All Markers", command=self._on_clear_all_markers)
         overlay_menu.add_command(label="List Markers", command=self._on_viewer_list_markers)
-        overlay_menu.add_command(label="Clear Markers", command=lambda: overlay.clear_markers(self._display_num()))
-        overlay_menu.add_command(label="Add Marker at Cursor", command=self._on_add_marker_at_cursor)
         menubar.add_cascade(label="Overlay", menu=overlay_menu)
+
+        nav_menu = tk.Menu(menubar, tearoff=0)
+        nav_menu.add_command(label="Move Mouse to...", command=self._on_move_mouse_to)
+        menubar.add_cascade(label="Navigate", menu=nav_menu)
 
     def _setup_toolbar(self):
         toolbar = ttk.Frame(self._tk)
         toolbar.pack(side=tk.TOP, fill=tk.X)
-        ttk.Button(toolbar, text="Attach", command=self._on_attach).pack(side=tk.LEFT, padx=2)
-        ttk.Button(toolbar, text="Detach", command=self._on_detach).pack(side=tk.LEFT, padx=2)
-        ttk.Button(toolbar, text="Capture", command=self._capture).pack(side=tk.LEFT, padx=2)
-        ttk.Button(toolbar, text="Reset Zoom", command=self._on_reset_zoom).pack(side=tk.LEFT, padx=2)
+        for text, cmd, tip in [
+            ("Attach", self._on_attach, "Attach to a session display"),
+            ("Detach", self._on_detach, "Detach from the current display"),
+            ("Capture", self._capture, "Save the current frame to /tmp"),
+            ("Reset Zoom", self._on_reset_zoom, "Reset the window size"),
+        ]:
+            btn = ttk.Button(toolbar, text=text, command=cmd)
+            btn.pack(side=tk.LEFT, padx=2)
+            ToolTip(btn, tip)
         ttk.Label(toolbar, text="FPS:").pack(side=tk.LEFT, padx=(10, 2))
         self._fps_var = tk.IntVar(value=self._session.fps)
         self._fps_spin = ttk.Spinbox(
@@ -67,10 +86,15 @@ class ViewerWindow:
         )
         self._fps_spin.pack(side=tk.LEFT, padx=2)
         self._fps_var.trace_add("write", lambda *a: self._on_fps_change())
+        ToolTip(self._fps_spin, "Target frame rate (1-60)")
         self._game_pid = os.environ.get("GT_SPECTOR_GAME_PID")
-        self._sound_btn = ttk.Button(toolbar, text=self._sound_icon(), command=self._on_sound_toggle)
+        self._sound_btn = ttk.Button(
+            toolbar, text=self._sound_label(), command=self._on_sound_toggle)
         self._sound_btn.pack(side=tk.LEFT, padx=2)
-        ttk.Button(toolbar, text="Quit", command=self._on_close).pack(side=tk.LEFT, padx=2)
+        ToolTip(self._sound_btn, "Mute / unmute the game's audio")
+        quit_btn = ttk.Button(toolbar, text="Quit", command=self._on_close)
+        quit_btn.pack(side=tk.LEFT, padx=2)
+        ToolTip(quit_btn, "Close this viewer")
 
     def _display_num(self) -> int:
         return int(self._session.display.lstrip(":"))
@@ -78,27 +102,54 @@ class ViewerWindow:
     def _on_overlay_toggle(self) -> None:
         overlay.set_overlay_enabled(self._display_num(), self._overlay_var.get())
 
+    def _on_set_marker_with_mouse(self) -> None:
+        overlay.set_overlay_enabled(self._display_num(), True)
+        self._overlay_var.set(True)
+        self._marker_pick_mode = True
+        self._status.config(text="Left-click on the frame to set a marker")
+
+    def _on_add_marker_at_location(self) -> None:
+        import tkinter.simpledialog as sd
+        x = sd.askinteger("Add Marker", "x:", parent=self._tk)
+        y = sd.askinteger("Add Marker", "y:", parent=self._tk)
+        if x is not None and y is not None:
+            overlay.add_marker(self._display_num(), x, y, "loc")
+            self._status.config(text=f"Marker added at ({x}, {y})")
+
     def _on_viewer_list_markers(self) -> None:
         win = tk.Toplevel(self._tk)
         win.title("Markers")
         for m in overlay.load_markers(self._display_num()):
             ttk.Label(win, text=f"{m.id} @ ({m.x},{m.y}) label='{m.label}'").pack(anchor=tk.W)
 
-    def _on_add_marker_at_cursor(self) -> None:
-        pos = getattr(self, "_last_frame_pos", None)
-        if pos:
-            overlay.add_marker(self._display_num(), pos[0], pos[1], "cursor")
+    def _on_clear_last_marker(self) -> None:
+        markers = overlay.load_markers(self._display_num())
+        if markers:
+            last = markers[-1]
+            overlay.clear_markers(self._display_num(), last.id)
+            self._status.config(text=f"Cleared marker {last.id}")
         else:
-            import tkinter.simpledialog as sd
-            x = sd.askinteger("Add Marker", "x:", parent=self._tk)
-            y = sd.askinteger("Add Marker", "y:", parent=self._tk)
-            if x is not None and y is not None:
-                overlay.add_marker(self._display_num(), x, y)
+            self._status.config(text="No markers to clear")
+
+    def _on_clear_all_markers(self) -> None:
+        overlay.clear_markers(self._display_num())
+        self._status.config(text="All markers cleared")
+
+    def _on_move_mouse_to(self) -> None:
+        import tkinter.simpledialog as sd
+        x = sd.askinteger("Move Mouse", "x:", parent=self._tk)
+        y = sd.askinteger("Move Mouse", "y:", parent=self._tk)
+        if x is not None and y is not None:
+            self._session.move_mouse(x, y)
+            self._status.config(text=f"Mouse moved to ({x}, {y})")
 
     def _sound_icon(self) -> str:
         if self._game_pid:
             return "🔇" if audio.is_muted(int(self._game_pid)) else "🔊"
         return "—"
+
+    def _sound_label(self) -> str:
+        return f"{self._sound_icon()} Sound"
 
     def _on_sound_toggle(self) -> None:
         if not self._game_pid:
@@ -106,7 +157,7 @@ class ViewerWindow:
             return
         muted = audio.is_muted(int(self._game_pid))
         audio.set_muted(int(self._game_pid), not muted)
-        self._sound_btn.config(text=self._sound_icon())
+        self._sound_btn.config(text=self._sound_label())
 
     def _setup_canvas(self):
         self._frame = ttk.Frame(self._tk)
@@ -199,6 +250,12 @@ class ViewerWindow:
         self._canvas_label.focus_set()
         fx = int(event.x / self._scale)
         fy = int(event.y / self._scale)
+        if self._marker_pick_mode:
+            self._marker_pick_mode = False
+            self._skip_release = True
+            overlay.add_marker(self._display_num(), fx, fy, "picked")
+            self._status.config(text=f"Marker set at ({fx}, {fy})")
+            return
         self._drag_start = (fx, fy)
         self._is_dragging = False
         self._session.move_mouse(fx, fy)
@@ -217,6 +274,9 @@ class ViewerWindow:
             return
         self._handling_release = True
         try:
+            if self._skip_release:
+                self._skip_release = False
+                return
             if event.widget is not self._canvas_label:
                 cx = event.x_root - self._canvas_label.winfo_rootx()
                 cy = event.y_root - self._canvas_label.winfo_rooty()

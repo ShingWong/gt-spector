@@ -16,6 +16,7 @@ from gt_spector.bot_manager import Bot, BotManager, BotState
 from gt_spector.monitor import BotMonitor
 from gt_spector.script import ScriptRunner
 from gt_spector.scripts.help_bot import HelpBot
+from viewer.tooltip import ToolTip
 
 
 class _VlmAdapter:
@@ -35,37 +36,6 @@ def _make_vlm() -> Any:
     except Exception:  # noqa: BLE001 - WIP module; degrade to None
         return None
     return _VlmAdapter(vlm)
-
-
-class ToolTip:
-    """Simple hover tooltip for a widget."""
-
-    def __init__(self, widget: Any, text: str = "") -> None:
-        self._widget = widget
-        self._text = text
-        self._tip: tk.Toplevel | None = None
-        widget.bind("<Enter>", self._show)
-        widget.bind("<Leave>", self._hide)
-
-    def set_text(self, text: str) -> None:
-        self._text = text
-
-    def _show(self, _event: Any = None) -> None:
-        if not self._text:
-            return
-        x = self._widget.winfo_rootx() + 16
-        y = self._widget.winfo_rooty() + self._widget.winfo_height() + 4
-        self._tip = tk.Toplevel(self._widget)
-        self._tip.wm_overrideredirect(True)
-        self._tip.wm_geometry(f"+{x}+{y}")
-        lbl = ttk.Label(self._tip, text=self._text, background="#ffffe0",
-                        relief=tk.SOLID, borderwidth=1)
-        lbl.pack()
-
-    def _hide(self, _event: Any = None) -> None:
-        if self._tip is not None:
-            self._tip.destroy()
-            self._tip = None
 
 
 class BotConsole:
@@ -241,6 +211,15 @@ class BotConsole:
         for w in self._list_frame.winfo_children():
             w.destroy()
         self._rows.clear()
+        header = ttk.Frame(self._list_frame)
+        header.pack(fill=tk.X, pady=(0, 2))
+        for text, width in [
+            ("", 2), ("Bot", 8), ("Account", 18), ("Disp", 5), ("Status", 24),
+            ("Activity", 16), ("Loc", 12), ("CR", 4), ("IV", 4), ("Snd", 2),
+            ("CPU", 6), ("Mem", 6), ("PID", 10),
+        ]:
+            ttk.Label(header, text=text, width=width, font=("", 9, "bold")).pack(side=tk.LEFT)
+        ttk.Label(header, text="", width=5).pack(side=tk.RIGHT)
         for bot in self._manager.bots:
             row = ttk.Frame(self._list_frame)
             row.pack(fill=tk.X, pady=2)
@@ -250,7 +229,7 @@ class BotConsole:
             acct = self._accounts.get(bot.name, "")
             ttk.Label(row, text=acct, width=18, anchor=tk.W).pack(side=tk.LEFT)
             ttk.Label(row, text=f":{bot.display}", width=5).pack(side=tk.LEFT)
-            status_lbl = ttk.Label(row, width=9)
+            status_lbl = ttk.Label(row, width=24)
             status_lbl.pack(side=tk.LEFT)
             status_tip = ToolTip(status_lbl, "")
             activity_lbl = ttk.Label(row, width=16, anchor=tk.W)
@@ -304,13 +283,22 @@ class BotConsole:
             return "red"
         return "black"
 
+    @staticmethod
+    def _status_text(script: str, loc: str | None) -> str:
+        """Script + map for the status column. State words live in the glyph."""
+        if script:
+            return f"{script} @ {loc or '?'}"
+        if loc and loc != "?":
+            return loc
+        return ""
+
     def _status_tooltip(self, bot: Bot, frame: np.ndarray | None = None) -> str:
         runner = self._runners.get(bot.name)
         script = runner.script.name if runner and runner.script else ""
         if frame is None:
             frame = self._read_frame(bot.display)
         loc = self._detect_location(bot, frame)
-        base = f"{bot.state.value} — {script or 'no script'}, in {loc or '?'}"
+        base = f"{bot.state.value} — {script} in {loc or '?'}" if script else f"{bot.state.value} — in {loc or '?'}"
         if getattr(bot, "intervention_count", 0) > 0:
             base += f", {bot.intervention_count} interventions"
         return base
@@ -358,8 +346,7 @@ class BotConsole:
             if not r:
                 continue
             self._manager._refresh_state(bot)
-            glyph, state_text = self._status_glyph(bot)
-            r["status"].config(text=f"{glyph} {state_text}", foreground=self._status_color(bot))
+            glyph, _ = self._status_glyph(bot)
             frame = self._read_frame(bot.display)
             self._frames[bot.name] = frame
             r["status_tip"].set_text(self._status_tooltip(bot, frame))
@@ -371,11 +358,14 @@ class BotConsole:
                     loc = vlm_loc
             r["loc"].config(text=loc or "?")
             runner = self._runners.get(bot.name)
+            script = runner.script.name if runner and runner.script else ""
+            status_text = self._status_text(script, loc)
+            r["status"].config(text=f"{glyph} {status_text}".rstrip(), foreground=self._status_color(bot))
             if runner and runner.script:
                 status = None
                 if frame is not None:
                     status = runner.tick(frame)
-                r["activity"].config(text=f"{runner.script.name}:{status or 'running'}")
+                r["activity"].config(text=status or "")
             else:
                 r["activity"].config(text="")
             r["cr"].config(text=str(bot.crash_count))

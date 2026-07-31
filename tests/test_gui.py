@@ -48,10 +48,10 @@ def test_sound_toggle_flips(monkeypatch):
     monkeypatch.setattr(gui_mod.audio, "set_muted", lambda pid, muted: state.update(muted=muted))
     w._on_sound_toggle()
     assert state["muted"] is True
-    assert button_calls == [{"text": "🔇"}]
+    assert button_calls == [{"text": "🔇 Sound"}]
     w._on_sound_toggle()
     assert state["muted"] is False
-    assert button_calls == [{"text": "🔇"}, {"text": "🔊"}]
+    assert button_calls == [{"text": "🔇 Sound"}, {"text": "🔊 Sound"}]
 
 
 def test_sound_toggle_no_pid():
@@ -129,15 +129,134 @@ def test_on_overlay_toggle(monkeypatch):
     assert calls == [(10, True)]
 
 
-def test_on_add_marker_at_cursor_uses_last_pos(monkeypatch):
-    calls: list[tuple] = []
-    w = make_window(_session=make_session(), _last_frame_pos=(42, 43))
+def test_on_set_marker_with_mouse_enables_overlay(monkeypatch):
+    set_calls: list[tuple] = []
+    var_calls: list[bool] = []
+    w = make_window(_session=make_session(), _status=make_status())
+    w._marker_pick_mode = False
+    w._overlay_var = type("Var", (), {"set": lambda self, v: var_calls.append(v)})()
+    monkeypatch.setattr(
+        gui_mod.overlay, "set_overlay_enabled", lambda d, e: set_calls.append((d, e)))
+    w._on_set_marker_with_mouse()
+    assert set_calls == [(10, True)]
+    assert var_calls == [True]
+    assert w._marker_pick_mode is True
+
+
+def test_canvas_click_pick_mode_places_marker(monkeypatch):
+    add_calls: list[tuple] = []
+    status_calls: list[dict] = []
+    w = make_window(
+        _session=make_session(),
+        _scale=2.0,
+        _marker_pick_mode=True,
+        _canvas_label=type("Lbl", (), {"focus_set": lambda self: None})(),
+        _status=type("Status", (), {"config": lambda self, **kw: status_calls.append(kw)})(),
+    )
     monkeypatch.setattr(
         gui_mod.overlay, "add_marker",
-        lambda d, x, y, label="": calls.append((d, x, y, label)),
+        lambda d, x, y, label="": add_calls.append((d, x, y, label)),
     )
-    w._on_add_marker_at_cursor()
-    assert calls == [(10, 42, 43, "cursor")]
+    w._on_canvas_click(type("Event", (), {"x": 20, "y": 40})())
+    assert add_calls == [(10, 10, 20, "picked")]
+    assert w._marker_pick_mode is False
+    assert w._skip_release is True
+    assert status_calls == [{"text": "Marker set at (10, 20)"}]
+
+
+def test_canvas_click_pick_mode_does_not_click_game():
+    sent: list[str] = []
+    session = type("Session", (), {
+        "display": ":10",
+        "move_mouse": lambda self, x, y: sent.append("move"),
+        "mouse_down": lambda self: sent.append("down"),
+        "mouse_up": lambda self: sent.append("up"),
+    })()
+    w = make_window(
+        _session=session,
+        _scale=1.0,
+        _marker_pick_mode=True,
+        _canvas_label=type("Lbl", (), {"focus_set": lambda self: None})(),
+        _status=make_status(),
+    )
+    w._on_canvas_click(type("Event", (), {"x": 5, "y": 6})())
+    assert sent == []
+
+
+def test_canvas_click_pick_mode_release_skips(monkeypatch):
+    w = make_window(
+        _session=make_session(),
+        _scale=1.0,
+        _marker_pick_mode=False,
+        _skip_release=True,
+        _handling_release=False,
+        _drag_start=None,
+        _is_dragging=False,
+        _canvas_label=type("Lbl", (), {})(),
+        _status=make_status(),
+        _last_click_time=0.0,
+    )
+    w._on_canvas_release(type("Event", (), {"widget": w._canvas_label, "x": 1, "y": 2})())
+    assert w._skip_release is False
+
+
+def test_on_clear_last_marker(monkeypatch):
+    calls: list[tuple] = []
+    w = make_window(_session=make_session(), _status=make_status())
+    markers = [type("M", (), {"id": "m1"})(), type("M", (), {"id": "m2"})()]
+    monkeypatch.setattr(gui_mod.overlay, "load_markers", lambda d: markers)
+    monkeypatch.setattr(
+        gui_mod.overlay, "clear_markers", lambda d, mid=None: calls.append((d, mid)))
+    w._on_clear_last_marker()
+    assert calls == [(10, "m2")]
+
+
+def test_on_clear_last_marker_none(monkeypatch):
+    status_calls: list[dict] = []
+    w = make_window(_session=make_session())
+    w._status = type("Status", (), {"config": lambda self, **kw: status_calls.append(kw)})()
+    monkeypatch.setattr(gui_mod.overlay, "load_markers", lambda d: [])
+    w._on_clear_last_marker()
+    assert status_calls == [{"text": "No markers to clear"}]
+
+
+def test_on_clear_all_markers(monkeypatch):
+    calls: list[tuple] = []
+    w = make_window(_session=make_session(), _status=make_status())
+    monkeypatch.setattr(
+        gui_mod.overlay, "clear_markers", lambda d, mid=None: calls.append((d, mid)))
+    w._on_clear_all_markers()
+    assert calls == [(10, None)]
+
+
+def test_on_add_marker_at_location(monkeypatch):
+    import tkinter.simpledialog as sd
+    add_calls: list[tuple] = []
+    status_calls: list[dict] = []
+    w = make_window(_session=make_session(), _tk=make_tk([]))
+    w._status = type("Status", (), {"config": lambda self, **kw: status_calls.append(kw)})()
+    monkeypatch.setattr(sd, "askinteger", lambda *a, **kw: 7)
+    monkeypatch.setattr(
+        gui_mod.overlay, "add_marker",
+        lambda d, x, y, label="": add_calls.append((d, x, y, label)),
+    )
+    w._on_add_marker_at_location()
+    assert add_calls == [(10, 7, 7, "loc")]
+
+
+def test_on_move_mouse_to(monkeypatch):
+    import tkinter.simpledialog as sd
+    moved: list[tuple] = []
+    status_calls: list[dict] = []
+    w = make_window(
+        _session=type("Session", (), {"move_mouse": lambda self, x, y: moved.append((x, y))})(),
+        _tk=make_tk([]),
+    )
+    w._status = type("Status", (), {"config": lambda self, **kw: status_calls.append(kw)})()
+    monkeypatch.setattr(sd, "askinteger", lambda *a, **kw: 12)
+    w._on_move_mouse_to()
+    assert moved == [(12, 12)]
+    assert status_calls == [{"text": "Mouse moved to (12, 12)"}]
 
 
 def test_on_viewer_list_markers(monkeypatch):

@@ -29,6 +29,17 @@ def test_status_glyph(state, expected):
     assert make_console()._status_glyph(make_bot(state)) == expected
 
 
+@pytest.mark.parametrize("script,loc,expected", [
+    ("help_bot", "LOBBY", "help_bot @ LOBBY"),
+    ("help_bot", None, "help_bot @ ?"),
+    ("", "LOBBY", "LOBBY"),
+    ("", None, ""),
+    ("", "?", ""),
+])
+def test_status_text(script, loc, expected):
+    assert BotConsole._status_text(script, loc) == expected
+
+
 @pytest.mark.parametrize(
     "state,expected",
     [
@@ -47,7 +58,7 @@ def test_status_tooltip_no_script():
     c = make_console()
     c._runners = {}
     c._read_frame = lambda d: None
-    assert c._status_tooltip(make_bot()) == "Running — no script, in ?"
+    assert c._status_tooltip(make_bot()) == "Running — in ?"
 
 
 def test_status_tooltip_with_script():
@@ -56,7 +67,7 @@ def test_status_tooltip_with_script():
     c = make_console()
     c._runners = {"bot01": type("R", (), {"script": HelpBot()})()}
     c._read_frame = lambda d: None
-    assert c._status_tooltip(make_bot()) == "Running — help-bot, in ?"
+    assert c._status_tooltip(make_bot()) == "Running — help-bot in ?"
 
 
 def test_status_tooltip_with_interventions():
@@ -67,7 +78,7 @@ def test_status_tooltip_with_interventions():
     c._read_frame = lambda d: None
     bot = make_bot()
     bot.intervention_count = 3
-    assert c._status_tooltip(bot) == "Running — help-bot, in ?, 3 interventions"
+    assert c._status_tooltip(bot) == "Running — help-bot in ?, 3 interventions"
 
 
 def test_detect_location_no_frame():
