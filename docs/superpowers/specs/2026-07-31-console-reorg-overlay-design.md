@@ -70,7 +70,7 @@ New functions in `overlay.py`:
 
 | Menu | Items |
 |------|-------|
-| **File** | Refresh, Quit |
+| **File** | Refresh, Settings…, Quit |
 | **Selection** | Check All, Uncheck All |
 | **Actions** | Start, Stop, Restart, Start All, Stop All, Restart All |
 | **Provision** | Provision Bots |
@@ -78,6 +78,9 @@ New functions in `overlay.py`:
 | **Overlay** | "Show Overlays" (checkbutton, global), Show on Checked, Hide on Checked, Add Marker…, List Markers, Clear Markers on Checked |
 | **Sound** | All Off (radio), Viewer Control (radio), All On (radio) |
 | **View** | Open Viewers (checked bots) |
+| **Logs** | Clear Logs |
+
+**Settings…** dialog: log rotation size (KB). Writes `log_max_bytes` to global settings.
 
 Menu items act on checked bots where applicable (Actions, Scripts, View, Overlay per-bot items). Overlay "Show Overlays" is a global checkbutton reflecting `overlay_settings.global_enabled`.
 
@@ -87,6 +90,7 @@ Compact buttons for the most common operations, separated into groups:
 - Start ▶, Stop ■, Restart ↻
 - Start All ▶▶, Stop All ■■, Restart All ↻↻
 - Help Bot, Stop Script
+- Clear Status, Clear Logs
 
 The old flat toolbar (Provision, Check All, Uncheck All, Help Bot, Stop Script buttons) is replaced by the menu bar + icon bar. Provision, Check/Uncheck All move to menus; Help Bot/Stop Script remain on the icon bar for quick access.
 
@@ -148,6 +152,68 @@ Functions in a small `sound_settings` helper (or inside `bot_manager.py`):
 - **On window close**: read global `settings.json`; if `sound_mode == "viewer"`, call `audio.set_muted(game_pid, True)` before destroying.
 - Viewer resolves game_pid from `GT_SPECTOR_GAME_PID`; if unset, skips sound control.
 
+## Monitoring, Health Check & Recovery
+
+### 9. Enhanced bot status columns
+
+New bot row layout:
+
+```
+☑ bot01 :10  acct@mail  [● RUNNING]  [help-bot:badge_info]  [ALLIANCE]  CR:2  IV:1  45% 1.2G 123 [View]
+☐ bot02 :11  acct@mail  [✕ OFFLINE]  [—]                    [—]         CR:0  IV:0  —    —    —   [View]
+```
+
+| Column | Content |
+|--------|---------|
+| **Status** | ● green (Running), ● yellow (Starting), ✕ red (Offline/Error) + state text |
+| **Activity** | What the bot is doing: script name + tick status (e.g., `help-bot:badge_info`), or blank |
+| **Location** | Current screen (ALLIANCE, LOBBY, EXIT, …), `?` if unknown, `blank` for blank/crash frames |
+| **CR** | Crash count (game restarts this session, in-memory) |
+| **IV** | Intervention count (recoveries this session, in-memory) |
+| snd | 🔊 / 🔇 / — |
+
+### 10. Screen monitor (`gt_spector/monitor.py`)
+
+- **Responsiveness check** (every 2s poll): SHM frame counter must advance. Stalled counter → non-responsive → treat as crash: restart game, increment CR, log to bot log.
+- **VLM screen ID** (background, throttled): round-robin over running bots, one per ~10s, **only when VLM slot is free** (shared VLM client busy flag; never blocks bot actions).
+  - Sends a **1/4 scale frame (288×216)** for fast (~1s) classification.
+  - Detects: screen identity, **blank screen**, **crash dialog**, wrong location.
+- **Screen fingerprint** (fast, no VLM): derived from `nav_table.json` states (`fingerprints` map added per state). Evaluated each poll (~1ms) to set the Location column; VLM refines/corrects when a fingerprint is ambiguous or absent.
+
+### 11. Recovery
+
+- A running script declares its **expected screen** (e.g., HelpBot → `ALLIANCE`).
+- If fingerprint/VLM location ≠ expected:
+  1. **Intervention** (increment IV, log event)
+  2. ESC-to-shelter (ESC chain to settlement)
+  3. Re-run the script that was running (e.g., HelpBot navigates to alliance and resumes)
+- If the game is non-responsive or shows a crash dialog → full game restart (increment CR, log event).
+- Recovery actions run on the console poll loop so they don't require extra threads.
+
+## Logging
+
+### 12. Logging subsystem (`gt_spector/logs.py`)
+
+```
+~/.config/gt-spector/logs/
+  system.log        ← console-level events (provision, refresh, mode changes, errors)
+  system.log.1      ← rotated copy
+  bot01.log         ← per-bot events (start, stop, crash, recovery, screen changes)
+  bot01.log.1
+  bot02.log
+```
+
+- **Rotation**: default **500 KB** per file, keep **2 copies** (`.log`, `.log.1`). Rotation size settable in the console (stored in global `settings.json` as `log_max_bytes`).
+- Rotation is safe-guarded (truncate-then-write after renaming, best-effort — logs are non-critical).
+
+### 13. Console logging integration
+
+- **System log** — console events: startup, refresh, provisioning, sound/overlay mode changes, errors.
+- **Bot log** — per-bot events: game start/stop, crash restart, screen recovery, screen changes.
+- **Clear Status** button — clears the console status bar.
+- **Clear Logs** button — truncates system + all bot logs (rotated copies also removed).
+- **Log Size** setting — spinbox/dialog in the File menu (Settings…) to set rotation size; writes `log_max_bytes` to global settings.
+
 ## Persistence
 
 All settings persist across restarts of the console, viewers, and game instances:
@@ -166,10 +232,16 @@ All settings persist across restarts of the console, viewers, and game instances
 - List Markers with no markers → show "No markers" in the dialog.
 - `pactl` unavailable or no sink-inputs for a bot → sound status shows "—", mute/unmute calls are no-ops.
 - Missing/corrupt `sound_mode` in global settings → default mode `viewer`.
+- VLM unavailable (server down) → monitor skips VLM checks, falls back to pixel fingerprints only; no crash loop.
+- Log file write failures (permissions/disk) → logged to stderr, never raises in the UI.
+- Recovery failing repeatedly for a bot → stop the script, mark bot state `ERROR`, log; do not loop forever.
 
 ## Testing
 
 - Unit tests for `overlay.py`: `overlay_enabled` truth table, `set_overlay_enabled` persistence, corrupted-file fallback.
 - Unit tests for `audio.py` (with pactl stubbed): `get_sink_inputs` parsing, `set_muted` subprocess args, `is_muted` result mapping.
+- Unit tests for `logs.py`: rotation at size threshold, 2-copy retention, truncate failure tolerance.
+- Unit tests for `monitor.py` (with frame/VLM stubbed): responsiveness detection, fingerprint matching, recovery trigger, CR/IV counters.
 - Manual: toggle global overlay in console → all viewers stop/start drawing; per-bot toggle affects only that bot's viewer.
 - Manual sound: switch modes All Off/Viewer Control/All On → verify mute state via `pactl list short sink-inputs`; open and close a viewer in viewer mode → sound toggles off on close.
+- Manual monitoring: stop a game's SHM updates → CR increments and game restarts; move a bot off the alliance screen while HelpBot runs → IV increments and recovery returns it to alliance.
