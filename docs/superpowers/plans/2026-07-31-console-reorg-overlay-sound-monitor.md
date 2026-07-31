@@ -399,21 +399,15 @@ def draw_markers(frame: np.ndarray, display: int) -> np.ndarray:
     ...
 ```
 
-Extend the CLI in `_main()`:
+Extend the CLI in `_main()`. The CLI convention is `<display> <cmd>`; `toggle` and `status` act on the display given at `argv[1]` (global toggling stays library-only, exposed via the console menu):
 
 ```python
     elif cmd == "toggle":
-        display_arg = sys.argv[3] if len(sys.argv) > 3 else None
-        d = int(display_arg) if display_arg is not None else None
-        state = toggle_overlay(d)
-        print(f"  Overlay {'ON' if state else 'OFF'} for {'global' if d is None else f'display {d}'}")
+        state = toggle_overlay(display)
+        print(f"  Overlay {'ON' if state else 'OFF'} for display {display}")
 
     elif cmd == "status":
-        d = int(sys.argv[3]) if len(sys.argv) > 3 else None
-        if d is None:
-            print(f"  Global overlay: {'ON' if _settings.overlay_global_enabled() else 'OFF'}")
-        else:
-            print(f"  Display {d} overlay: {'ON' if overlay_enabled(d) else 'OFF'}")
+        print(f"  Display {display} overlay: {'ON' if overlay_enabled(display) else 'OFF'}")
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
