@@ -139,7 +139,7 @@ class BotMonitor:
                 "Format: SCREEN: <name>"), max_tokens=200)
             content = result["choices"][0]["message"]["content"]
             return _parse_screen(content)
-        except (KeyError, IndexError, RuntimeError, OSError, ValueError,
+        except (KeyError, IndexError, TypeError, AttributeError, RuntimeError, OSError, ValueError,
                 requests.exceptions.RequestException):
             return None
 

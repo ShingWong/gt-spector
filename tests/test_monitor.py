@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+import requests
 
 
 @pytest.fixture()
@@ -93,6 +94,40 @@ def test_classify_frame_calls_vlm(monkeypatch):
 def test_classify_frame_returns_none_on_error(monkeypatch):
     from gt_spector import monitor
     m = monitor.BotMonitor(None, vlm=type("V", (), {"analyze_frame": lambda *a, **k: (_ for _ in ()).throw(RuntimeError())})())
+    import numpy as np
+    assert m.classify_frame(np.zeros((10, 10, 3), dtype=np.uint8), 10) is None
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [requests.exceptions.ConnectionError, requests.exceptions.Timeout, requests.exceptions.HTTPError],
+)
+def test_classify_frame_returns_none_on_request_errors(exc):
+    from gt_spector import monitor
+    m = monitor.BotMonitor(None, vlm=type("V", (), {"analyze_frame": lambda *a, **k: (_ for _ in ()).throw(exc())})())
+    import numpy as np
+    assert m.classify_frame(np.zeros((10, 10, 3), dtype=np.uint8), 10) is None
+
+
+def test_classify_frame_content_none_returns_none():
+    from gt_spector import monitor
+    vlm = type("V", (), {"analyze_frame": lambda *a, **k: {"choices": [{"message": {"content": None}}]}})()
+    m = monitor.BotMonitor(None, vlm=vlm)
+    import numpy as np
+    assert m.classify_frame(np.zeros((10, 10, 3), dtype=np.uint8), 10) is None
+
+
+def test_classify_frame_non_dict_message_returns_none():
+    from gt_spector import monitor
+    vlm = type("V", (), {"analyze_frame": lambda *a, **k: {"choices": [{"message": "not a dict"}]}})()
+    m = monitor.BotMonitor(None, vlm=vlm)
+    import numpy as np
+    assert m.classify_frame(np.zeros((10, 10, 3), dtype=np.uint8), 10) is None
+
+
+def test_classify_frame_vlm_none_returns_none():
+    from gt_spector import monitor
+    m = monitor.BotMonitor(None)
     import numpy as np
     assert m.classify_frame(np.zeros((10, 10, 3), dtype=np.uint8), 10) is None
 
