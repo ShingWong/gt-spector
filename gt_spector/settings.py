@@ -13,6 +13,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from typing import Any, cast
 
 CONFIG_DIR = Path.home() / ".config" / "gt-spector"
 GLOBAL_PATH = CONFIG_DIR / "settings.json"
@@ -22,14 +23,14 @@ DEFAULT_LOG_MAX_BYTES = 512 * 1024
 DEFAULT_SOUND_MODE = "viewer"
 
 
-def load_json(path: Path, default: dict) -> dict:
+def load_json(path: Path, default: dict[str, Any]) -> dict[str, Any]:
     try:
-        return json.loads(path.read_text())
+        return cast(dict[str, Any], json.loads(path.read_text()))
     except (FileNotFoundError, json.JSONDecodeError, OSError):
         return default
 
 
-def save_json(path: Path, data: dict) -> None:
+def save_json(path: Path, data: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
     try:
@@ -43,21 +44,21 @@ def save_json(path: Path, data: dict) -> None:
             pass
 
 
-def get_global() -> dict:
+def get_global() -> dict[str, Any]:
     return load_json(GLOBAL_PATH, {})
 
 
-def set_global(**kwargs) -> None:
+def set_global(**kwargs: Any) -> None:
     data = get_global()
     data.update(kwargs)
     save_json(GLOBAL_PATH, data)
 
 
-def get_bot(name: str) -> dict:
+def get_bot(name: str) -> dict[str, Any]:
     return load_json(BOTS_DIR / f"{name}.json", {})
 
 
-def set_bot(name: str, **kwargs) -> None:
+def set_bot(name: str, **kwargs: Any) -> None:
     data = get_bot(name)
     data.update(kwargs)
     save_json(BOTS_DIR / f"{name}.json", data)
@@ -72,7 +73,7 @@ def set_overlay_global(enabled: bool) -> None:
 
 
 def bot_overlay_enabled(name: str) -> bool:
-    return bool(get_bot(name).get("overlay_enabled", True))
+    return cast(bool, get_bot(name).get("overlay_enabled", True))
 
 
 def set_bot_overlay(name: str, enabled: bool) -> None:
@@ -80,7 +81,7 @@ def set_bot_overlay(name: str, enabled: bool) -> None:
 
 
 def sound_mode() -> str:
-    return get_global().get("sound_mode", DEFAULT_SOUND_MODE)
+    return cast(str, get_global().get("sound_mode", DEFAULT_SOUND_MODE))
 
 
 def set_sound_mode(mode: str) -> None:
@@ -88,7 +89,7 @@ def set_sound_mode(mode: str) -> None:
 
 
 def bot_sound_muted(name: str) -> bool:
-    return bool(get_bot(name).get("sound_muted", False))
+    return cast(bool, get_bot(name).get("sound_muted", False))
 
 
 def set_bot_sound_muted(name: str, muted: bool) -> None:
