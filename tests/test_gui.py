@@ -1,5 +1,6 @@
 import pytest
 
+from gt_spector import bot_manager
 from viewer import gui as gui_mod
 from viewer.gui import ViewerWindow
 
@@ -9,6 +10,12 @@ def make_window(**attrs) -> ViewerWindow:
     for k, v in attrs.items():
         setattr(w, k, v)
     return w
+
+
+@pytest.fixture()
+def no_live_pid(monkeypatch):
+    monkeypatch.setattr(bot_manager.BotManager, "find_game_pid_by_display",
+                        lambda self, display: None)
 
 
 def make_session(display: str = ":10") -> object:
@@ -24,23 +31,41 @@ def test_display_num():
     assert w._display_num() == 10
 
 
-def test_sound_icon_no_pid():
-    w = make_window(_game_pid=None)
+def test_sound_icon_no_pid(no_live_pid):
+    w = make_window(_session=make_session(), _game_pid_env=None)
     assert w._sound_icon() == "—"
 
 
 @pytest.mark.parametrize("muted,expected", [(True, "🔇"), (False, "🔊"), (None, "🔊")])
-def test_sound_icon(monkeypatch, muted, expected):
-    w = make_window(_game_pid="123")
+def test_sound_icon(no_live_pid, monkeypatch, muted, expected):
+    w = make_window(_session=make_session(), _game_pid_env="123")
     monkeypatch.setattr(gui_mod.audio, "is_muted", lambda pid: muted)
     assert w._sound_icon() == expected
 
 
-def test_sound_toggle_flips(monkeypatch):
+def test_game_pid_resolves_live(monkeypatch):
+    monkeypatch.setattr(bot_manager.BotManager, "find_game_pid_by_display",
+                        lambda self, display: 999)
+    w = make_window(_session=make_session(), _game_pid_env="123")
+    assert w._game_pid() == 999
+
+
+def test_game_pid_falls_back_to_env(no_live_pid):
+    w = make_window(_session=make_session(), _game_pid_env="123")
+    assert w._game_pid() == 123
+
+
+def test_game_pid_none_when_no_live_or_env(no_live_pid):
+    w = make_window(_session=make_session(), _game_pid_env=None)
+    assert w._game_pid() is None
+
+
+def test_sound_toggle_flips(no_live_pid, monkeypatch):
     state = {"muted": False}
     button_calls: list[dict] = []
     w = make_window(
-        _game_pid="123",
+        _session=make_session(),
+        _game_pid_env="123",
         _status=make_status(),
         _sound_btn=type("Btn", (), {"config": lambda self, **kw: button_calls.append(kw)})(),
     )
@@ -54,19 +79,19 @@ def test_sound_toggle_flips(monkeypatch):
     assert button_calls == [{"text": "🔇 Sound"}, {"text": "🔊 Sound"}]
 
 
-def test_sound_toggle_no_pid():
+def test_sound_toggle_no_pid(no_live_pid):
     status_calls: list[dict] = []
-    w = make_window(_game_pid=None)
+    w = make_window(_session=make_session(), _game_pid_env=None)
     w._status = type("Status", (), {"config": lambda self, **kw: status_calls.append(kw)})()
     w._sound_btn = type("Btn", (), {"config": lambda self, **kw: None})()
     w._on_sound_toggle()
     assert status_calls == [{"text": "No game pid for sound control"}]
 
 
-def test_on_close_mutes_in_viewer_mode(monkeypatch):
+def test_on_close_mutes_in_viewer_mode(no_live_pid, monkeypatch):
     destroyed: list[int] = []
     muted_calls: list[tuple] = []
-    w = make_window(_game_pid="123", _tk=make_tk(destroyed))
+    w = make_window(_session=make_session(), _game_pid_env="123", _tk=make_tk(destroyed))
     monkeypatch.setattr(gui_mod.settings, "sound_mode", lambda: "viewer")
     monkeypatch.setattr(gui_mod.audio, "set_muted", lambda pid, muted: muted_calls.append((pid, muted)))
     w._on_close()
@@ -75,9 +100,9 @@ def test_on_close_mutes_in_viewer_mode(monkeypatch):
     assert w._running is False
 
 
-def test_on_close_no_mute_other_mode(monkeypatch):
+def test_on_close_no_mute_other_mode(no_live_pid, monkeypatch):
     destroyed: list[int] = []
-    w = make_window(_game_pid="123", _tk=make_tk(destroyed))
+    w = make_window(_session=make_session(), _game_pid_env="123", _tk=make_tk(destroyed))
     monkeypatch.setattr(gui_mod.settings, "sound_mode", lambda: "never")
     monkeypatch.setattr(gui_mod.audio, "set_muted", lambda pid, muted: pytest.fail("no set"))
     w._on_close()
@@ -85,9 +110,9 @@ def test_on_close_no_mute_other_mode(monkeypatch):
     assert w._running is False
 
 
-def test_on_close_no_pid(monkeypatch):
+def test_on_close_no_pid(no_live_pid, monkeypatch):
     destroyed: list[int] = []
-    w = make_window(_game_pid=None, _tk=make_tk(destroyed))
+    w = make_window(_session=make_session(), _game_pid_env=None, _tk=make_tk(destroyed))
     monkeypatch.setattr(gui_mod.settings, "sound_mode", lambda: "viewer")
     monkeypatch.setattr(gui_mod.audio, "set_muted", lambda pid, muted: pytest.fail("no set"))
     w._on_close()
@@ -95,9 +120,9 @@ def test_on_close_no_pid(monkeypatch):
     assert w._running is False
 
 
-def test_on_close_bad_pid_still_closes(monkeypatch):
+def test_on_close_bad_pid_still_closes(no_live_pid, monkeypatch):
     destroyed: list[int] = []
-    w = make_window(_game_pid="not-a-pid", _tk=make_tk(destroyed))
+    w = make_window(_session=make_session(), _game_pid_env="not-a-pid", _tk=make_tk(destroyed))
     monkeypatch.setattr(gui_mod.settings, "sound_mode", lambda: "viewer")
     w._on_close()
     assert destroyed == [1]

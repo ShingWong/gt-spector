@@ -118,6 +118,24 @@ class BotManager:
                 continue
         return None
 
+    def find_game_pid_by_display(self, display: int) -> int | None:
+        disp = f":{display}".encode()
+        for pid_str in os.listdir("/proc/"):
+            if not pid_str.isdigit():
+                continue
+            try:
+                with open(f"/proc/{pid_str}/cmdline", "rb") as f:
+                    cmdline = f.read()
+                if b"Doomsday.exe" not in cmdline or b"start.exe" in cmdline:
+                    continue
+                with open(f"/proc/{pid_str}/environ", "rb") as f:
+                    env = f.read()
+                if b"DISPLAY=" + disp + b"\x00" in env:
+                    return int(pid_str)
+            except (FileNotFoundError, PermissionError, ProcessLookupError):
+                continue
+        return None
+
     def _pid_alive(self, pid: int) -> bool:
         try:
             os.kill(pid, 0)

@@ -46,6 +46,7 @@ class BotConsole:
         self._frames: dict[str, np.ndarray | None] = {}
         self._nav_cache: dict[str, Any] | None = None
         self._vlm_screens: dict[str, str] = {}
+        self._sound_applied: dict[str, int] = {}
 
         self._tk = tk.Tk()
         self._tk.title("gt-spector — Bot Console")
@@ -475,17 +476,25 @@ class BotConsole:
 
     def _on_sound_mode(self) -> None:
         settings.set_sound_mode(self._sound_mode_var.get())
+        self._sound_applied.clear()
         self._apply_sound_policy()
         logs.log_system(f"sound mode = {settings.sound_mode()}")
 
-    def _apply_sound_policy(self) -> None:
+    def _apply_sound_for_bot(self, bot: Bot) -> None:
+        if not bot.pid:
+            return
         mode = settings.sound_mode()
+        if mode == "all_off":
+            audio.set_muted(bot.pid, True)
+        elif mode == "all_on":
+            audio.set_muted(bot.pid, False)
+        elif settings.bot_sound_muted(bot.name):
+            audio.set_muted(bot.pid, True)
+        self._sound_applied[bot.name] = bot.pid
+
+    def _apply_sound_policy(self) -> None:
         for bot in self._manager.bots:
-            if mode == "all_off" and bot.pid:
-                audio.set_muted(bot.pid, True)
-            elif mode == "all_on" and bot.pid:
-                audio.set_muted(bot.pid, False)
-            # viewer mode: per-bot sound_muted governs; viewers set it directly
+            self._apply_sound_for_bot(bot)
 
     def _open_viewers(self) -> None:
         for bot in self._get_checked():
@@ -604,6 +613,8 @@ class BotConsole:
                 continue
             now = time.monotonic()
             self._monitor.note_running(bot, now)
+            if self._sound_applied.get(bot.name) != bot.pid:
+                self._apply_sound_for_bot(bot)
             runner = self._runners.get(bot.name)
             if not self._monitor.check_responsiveness(bot, now):
                 self._monitor.mark_crash(bot)

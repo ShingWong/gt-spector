@@ -6,7 +6,9 @@ from viewer.bot_console import BotConsole
 
 
 def make_console() -> BotConsole:
-    return object.__new__(BotConsole)
+    c = object.__new__(BotConsole)
+    c._sound_applied = {}
+    return c
 
 
 def make_bot(state: BotState = BotState.RUNNING, name: str = "bot01") -> Bot:
@@ -248,6 +250,37 @@ def test_monitor_tick_recovery_succeeded_on_expected_screen(tmp_path, monkeypatc
     c._monitor_tick()
     assert calls["succeeded"] is True
     assert bot.state == BotState.RUNNING
+
+
+def test_monitor_tick_reapplies_sound_on_pid_change(tmp_path, monkeypatch):
+    from gt_spector import logs
+
+    monkeypatch.setattr(logs, "LOGS_DIR", tmp_path)
+    c = make_console()
+    bot = make_bot()
+    bot.pid = 111
+    c._manager = type("M", (), {"bots": [bot]})()
+    c._runners = {}
+    c._frames = {}
+    applied = []
+    c._apply_sound_for_bot = lambda bot: applied.append(bot.pid)
+
+    class FakeMonitor:
+        def note_running(self, bot, now):
+            pass
+
+        def check_responsiveness(self, bot, now):
+            return True
+
+    c._monitor = FakeMonitor()
+    c._monitor_tick()
+    assert applied == [111]
+    assert c._sound_applied == {"bot01": 111}
+    c._monitor_tick()
+    assert applied == [111]
+    bot.pid = 222
+    c._monitor_tick()
+    assert applied == [111, 222]
 
 
 def test_monitor_tick_crash_restarts_game(tmp_path, monkeypatch):

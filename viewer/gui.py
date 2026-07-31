@@ -87,7 +87,7 @@ class ViewerWindow:
         self._fps_spin.pack(side=tk.LEFT, padx=2)
         self._fps_var.trace_add("write", lambda *a: self._on_fps_change())
         ToolTip(self._fps_spin, "Target frame rate (1-60)")
-        self._game_pid = os.environ.get("GT_SPECTOR_GAME_PID")
+        self._game_pid_env = os.environ.get("GT_SPECTOR_GAME_PID")
         self._sound_btn = ttk.Button(
             toolbar, text=self._sound_label(), command=self._on_sound_toggle)
         self._sound_btn.pack(side=tk.LEFT, padx=2)
@@ -98,6 +98,19 @@ class ViewerWindow:
 
     def _display_num(self) -> int:
         return int(self._session.display.lstrip(":"))
+
+    def _game_pid(self) -> int | None:
+        from gt_spector.bot_manager import BotManager
+
+        pid = BotManager().find_game_pid_by_display(self._display_num())
+        if pid is not None:
+            return pid
+        if self._game_pid_env:
+            try:
+                return int(self._game_pid_env)
+            except ValueError:
+                return None
+        return None
 
     def _on_overlay_toggle(self) -> None:
         overlay.set_overlay_enabled(self._display_num(), self._overlay_var.get())
@@ -144,19 +157,24 @@ class ViewerWindow:
             self._status.config(text=f"Mouse moved to ({x}, {y})")
 
     def _sound_icon(self) -> str:
-        if self._game_pid:
-            return "🔇" if audio.is_muted(int(self._game_pid)) else "🔊"
+        pid = self._game_pid()
+        if pid:
+            return "🔇" if audio.is_muted(pid) else "🔊"
         return "—"
 
     def _sound_label(self) -> str:
         return f"{self._sound_icon()} Sound"
 
     def _on_sound_toggle(self) -> None:
-        if not self._game_pid:
+        pid = self._game_pid()
+        if not pid:
             self._status.config(text="No game pid for sound control")
             return
-        muted = audio.is_muted(int(self._game_pid))
-        audio.set_muted(int(self._game_pid), not muted)
+        muted = audio.is_muted(pid)
+        audio.set_muted(pid, not muted)
+        bot_name = overlay.display_to_bot(self._display_num())
+        if bot_name:
+            settings.set_bot_sound_muted(bot_name, not muted)
         self._sound_btn.config(text=self._sound_label())
 
     def _setup_canvas(self):
@@ -407,10 +425,11 @@ class ViewerWindow:
         self._status.config(text="Detached")
 
     def _on_close(self):
-        if self._game_pid:
+        pid = self._game_pid()
+        if pid:
             try:
                 if settings.sound_mode() == "viewer":
-                    audio.set_muted(int(self._game_pid), True)
+                    audio.set_muted(pid, True)
             except (ValueError, OSError):
                 pass
         self._running = False
