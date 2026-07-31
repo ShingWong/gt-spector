@@ -75,7 +75,8 @@ def test_should_vlm_check_throttled():
 
 
 def test_classify_frame_calls_vlm(monkeypatch):
-    from gt_spector import monitor
+    from gt_spector import monitor, settings
+    monkeypatch.setattr(settings, "vlm_downscale", lambda: 2)
     calls = {}
 
     class FakeVLM:
@@ -87,8 +88,32 @@ def test_classify_frame_calls_vlm(monkeypatch):
     import numpy as np
     frame = np.zeros((864, 1152, 3), dtype=np.uint8)
     assert m.classify_frame(frame, 10) == "ALLIANCE"
-    # 1/4 scale sent to VLM
+    # 1/2 scale sent to VLM (higher res than the old 1/4)
+    assert calls["shape"] == (432, 576, 3)
+
+
+def test_classify_frame_uses_settable_downscale(monkeypatch):
+    from gt_spector import monitor, settings
+    monkeypatch.setattr(settings, "vlm_downscale", lambda: 4)
+    calls = {}
+
+    class FakeVLM:
+        def analyze_frame(self, frame, prompt=None, max_tokens=200):
+            calls["shape"] = frame.shape
+            return {"choices": [{"message": {"content": "SCREEN: LOBBY"}}]}
+
+    m = monitor.BotMonitor(None, vlm=FakeVLM())
+    import numpy as np
+    frame = np.zeros((864, 1152, 3), dtype=np.uint8)
+    assert m.classify_frame(frame, 10) == "LOBBY"
     assert calls["shape"] == (216, 288, 3)
+
+
+def test_gpu_slot_free():
+    from gt_spector import monitor
+    assert monitor.gpu_slot_free({"gpu_busy_percent": 10.0}) is True
+    assert monitor.gpu_slot_free({"gpu_busy_percent": 95.0}) is False
+    assert monitor.gpu_slot_free({}) is True
 
 
 def test_classify_frame_returns_none_on_error(monkeypatch):

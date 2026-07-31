@@ -21,6 +21,8 @@ BOTS_DIR = CONFIG_DIR / "bots"
 
 DEFAULT_LOG_MAX_BYTES = 512 * 1024
 DEFAULT_SOUND_MODE = "viewer"
+DEFAULT_VLM_INTERVAL = 10.0
+DEFAULT_VLM_DOWNSCALE = 2
 
 
 def load_json(path: Path, default: dict[str, Any]) -> dict[str, Any]:
@@ -105,3 +107,25 @@ def log_max_bytes() -> int:
 
 def set_log_max_bytes(n: int) -> None:
     set_global(log_max_bytes=max(1024, int(n)))
+
+
+def vlm_interval() -> float:
+    try:
+        return float(get_global().get("vlm_interval", DEFAULT_VLM_INTERVAL))
+    except (TypeError, ValueError):
+        return DEFAULT_VLM_INTERVAL
+
+
+def set_vlm_interval(seconds: float) -> None:
+    set_global(vlm_interval=max(1.0, float(seconds)))
+
+
+def vlm_downscale() -> int:
+    try:
+        return max(1, int(get_global().get("vlm_downscale", DEFAULT_VLM_DOWNSCALE)))
+    except (TypeError, ValueError):
+        return DEFAULT_VLM_DOWNSCALE
+
+
+def set_vlm_downscale(factor: int) -> None:
+    set_global(vlm_downscale=max(1, int(factor)))

@@ -16,6 +16,8 @@ def test_defaults_when_missing(cfg):
     assert cfg.sound_mode() == "viewer"
     assert cfg.bot_sound_muted("bot01") is False
     assert cfg.log_max_bytes() == 512 * 1024
+    assert cfg.vlm_interval() == 10.0
+    assert cfg.vlm_downscale() == 2
 
 
 def test_global_roundtrip(cfg):
@@ -37,6 +39,18 @@ def test_bot_files_are_isolated(cfg):
     cfg.set_bot("bot02", overlay_enabled=True)
     assert (cfg.BOTS_DIR / "bot01.json").exists()
     assert (cfg.BOTS_DIR / "bot02.json").exists()
+
+
+def test_vlm_interval_roundtrip(cfg):
+    assert cfg.vlm_interval() == 10.0
+    cfg.set_vlm_interval(30.0)
+    assert cfg.vlm_interval() == 30.0
+
+
+def test_vlm_downscale_roundtrip(cfg):
+    assert cfg.vlm_downscale() == 2
+    cfg.set_vlm_downscale(4)
+    assert cfg.vlm_downscale() == 4
 
 
 def test_log_size_roundtrip(cfg):

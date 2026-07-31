@@ -11,7 +11,7 @@ from typing import Any
 import numpy as np
 import requests
 
-from gt_spector import logs
+from gt_spector import logs, settings
 
 
 def _in_range(val: int, rng: tuple[int, int]) -> bool:
@@ -58,9 +58,22 @@ STARTUP_GRACE = 60.0
 
 MAX_RECOVERY_ATTEMPTS = 3
 
+GPU_BUSY_MAX = 85.0
 
-def _downscale(frame: np.ndarray, factor: int = 4) -> np.ndarray:
+
+def _downscale(frame: np.ndarray, factor: int | None = None) -> np.ndarray:
+    if factor is None:
+        factor = settings.vlm_downscale()
     return frame[::factor, ::factor, :3]
+
+
+def gpu_slot_free(gpu_stats: dict[str, Any]) -> bool:
+    """True when the GPU has headroom for a VLM inference."""
+    busy = gpu_stats.get("gpu_busy_percent", 0.0)
+    try:
+        return float(busy) < GPU_BUSY_MAX
+    except (TypeError, ValueError):
+        return True
 
 
 def _parse_screen(content: str) -> str | None:
@@ -155,7 +168,7 @@ class BotMonitor:
 
     def should_vlm_check(self, bot: Any, now: float) -> bool:
         last = self._last_vlm_check.get(bot.name, -1e9)
-        if (now - last) >= VLM_INTERVAL:
+        if (now - last) >= settings.vlm_interval():
             self._last_vlm_check[bot.name] = now
             return True
         return False

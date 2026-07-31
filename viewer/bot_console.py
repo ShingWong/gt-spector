@@ -329,11 +329,6 @@ class BotConsole:
             self._frames[bot.name] = frame
             self._tooltips[bot.name] = self._status_tooltip(bot, frame)
             loc = self._detect_location(bot, frame)
-            if loc is None:
-                vlm_loc = self._monitor.vlm_tick(frame, bot, time.monotonic())
-                if vlm_loc:
-                    self._vlm_screens[bot.name] = vlm_loc
-                    loc = vlm_loc
             runner = self._runners.get(bot.name)
             script = runner.script.name if runner and runner.script else ""
             status_text = self._status_text(script, loc)
@@ -514,6 +509,16 @@ class BotConsole:
         if val:
             settings.set_log_max_bytes(val * 1024)
             logs.log_system(f"log_max_bytes = {val * 1024}")
+        ival = sd.askfloat("Settings", "VLM status interval (s):", parent=self._tk,
+                           initialvalue=settings.vlm_interval(), minvalue=1)
+        if ival:
+            settings.set_vlm_interval(ival)
+            logs.log_system(f"vlm_interval = {ival}")
+        dval = sd.askinteger("Settings", "VLM downscale factor (1=full res):", parent=self._tk,
+                             initialvalue=settings.vlm_downscale(), minvalue=1)
+        if dval:
+            settings.set_vlm_downscale(dval)
+            logs.log_system(f"vlm_downscale = {dval}")
 
     def _start_help_bot(self) -> None:
         for bot in self._get_checked():
@@ -607,6 +612,25 @@ class BotConsole:
         self._status = ttk.Label(self._tk, text="Ready", relief=tk.SUNKEN, anchor=tk.W)
         self._status.pack(side=tk.BOTTOM, fill=tk.X)
 
+    def _vlm_status_tick(self) -> None:
+        """Classify running bots via VLM on the settable interval, gated on GPU headroom."""
+        gpu = self._manager.get_gpu_stats()
+        if not monitor.gpu_slot_free(gpu):
+            return
+        now = time.monotonic()
+        for bot in self._manager.bots:
+            if bot.state != BotState.RUNNING or not bot.pid:
+                continue
+            frame = self._frames.get(bot.name)
+            if frame is None:
+                continue
+            if not self._monitor.should_vlm_check(bot, now):
+                continue
+            vlm_loc = self._monitor.classify_frame(frame, bot.display)
+            if vlm_loc:
+                self._vlm_screens[bot.name] = vlm_loc
+                logs.log_bot(bot.name, f"VLM screen = {vlm_loc}")
+
     def _monitor_tick(self) -> None:
         for bot in self._manager.bots:
             if bot.state != BotState.RUNNING or not bot.pid:
@@ -641,6 +665,7 @@ class BotConsole:
     def _poll(self) -> None:
         self._nav_cache = None
         self._update_rows()
+        self._vlm_status_tick()
         self._monitor_tick()
         self._tk.after(2000, self._poll)
 
