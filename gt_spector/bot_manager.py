@@ -104,10 +104,12 @@ class BotManager:
             if not pid_str.isdigit():
                 continue
             try:
-                cmdline = open(f"/proc/{pid_str}/cmdline", "rb").read()
+                with open(f"/proc/{pid_str}/cmdline", "rb") as f:
+                    cmdline = f.read()
                 if b"Doomsday.exe" not in cmdline or b"start.exe" in cmdline:
                     continue
-                env = open(f"/proc/{pid_str}/environ", "rb").read()
+                with open(f"/proc/{pid_str}/environ", "rb") as f:
+                    env = f.read()
                 if b"WINEPREFIX=" + prefix + b"\x00" in env:
                     return int(pid_str)
             except (FileNotFoundError, PermissionError, ProcessLookupError):
@@ -125,7 +127,7 @@ class BotManager:
         r = subprocess.run(
             ["xdotool", "search", "--name", "Doomsday: Last Survivors"],
             capture_output=True, text=True, env={"DISPLAY": f":{display}"},
-            timeout=5,
+            timeout=5, check=False,
         )
         wins = r.stdout.strip().split()
         return wins[0] if wins else None
@@ -133,9 +135,9 @@ class BotManager:
     def start_xvfb(self, bot: Bot) -> None:
         display = bot.display
         subprocess.run(["fuser", "-k", f"/tmp/.X11-unix/X{display}"],
-                       capture_output=True, timeout=5)
+                       capture_output=True, timeout=5, check=False)
         subprocess.run(["fuser", "-k", f"/tmp/.X{display}-lock"],
-                       capture_output=True, timeout=5)
+                       capture_output=True, timeout=5, check=False)
         for p in (f"/tmp/.X{display}-lock", f"/tmp/.X11-unix/X{display}"):
             try:
                 os.remove(p)
@@ -145,7 +147,7 @@ class BotManager:
             ["Xvfb", f":{display}", "-screen", "0", "1152x864x24",
              "-nolisten", "tcp", "-noreset", "-ac"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            preexec_fn=os.setpgrp,
+            start_new_session=True,
         )
         bot.xvfb_pid = proc.pid
         time.sleep(2)
@@ -179,7 +181,7 @@ class BotManager:
              "-fullscreen", "False", "-la"],
             cwd=bot.game_dir, env=env,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            preexec_fn=os.setpgrp,
+            start_new_session=True,
         )
         bot.pid = proc.pid
         time.sleep(3)
@@ -222,7 +224,7 @@ class BotManager:
         try:
             r = subprocess.run(
                 ["ps", "-p", str(pid), "-o", "%cpu=,%mem=,rss=", "--no-headers"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True, text=True, timeout=5, check=False,
             )
             parts = r.stdout.strip().split()
             if len(parts) < 3:

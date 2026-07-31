@@ -54,6 +54,8 @@ class BotConsole:
         self._manager.load_from_prefixes()
         self._accounts = self._load_accounts()
         self._monitor = BotMonitor(self._manager)
+        self._frames: dict[str, np.ndarray | None] = {}
+        self._nav_cache: dict[str, Any] | None = None
 
         self._tk = tk.Tk()
         self._tk.title("gt-spector — Bot Console")
@@ -280,10 +282,12 @@ class BotConsole:
             return "red"
         return "black"
 
-    def _status_tooltip(self, bot: Bot) -> str:
+    def _status_tooltip(self, bot: Bot, frame: np.ndarray | None = None) -> str:
         runner = self._runners.get(bot.name)
         script = runner.script.name if runner and runner.script else ""
-        loc = self._detect_location(bot, self._read_frame(bot.display))
+        if frame is None:
+            frame = self._read_frame(bot.display)
+        loc = self._detect_location(bot, frame)
         base = f"{bot.state.value} — {script or 'no script'}, in {loc or '?'}"
         if getattr(bot, "intervention_count", 0) > 0:
             base += f", {bot.intervention_count} interventions"
@@ -296,12 +300,23 @@ class BotConsole:
             return "blank"
         return monitor.detect_screen(frame, self._nav_table())
 
+    @staticmethod
+    def _needs_recovery(loc: str | None, expected: str | None) -> bool:
+        if loc in (None, "?", "blank"):
+            return False
+        return expected is not None and loc != expected
+
     def _nav_table(self) -> dict[str, Any]:
+        cache = cast(dict[str, Any] | None, getattr(self, "_nav_cache", None))
+        if cache is not None:
+            return cache
         p = Path("~/.config/gt-spector/nav_table.json").expanduser()
         try:
-            return cast(dict[str, Any], json.loads(p.read_text()))
+            cache = cast(dict[str, Any], json.loads(p.read_text()))
         except (FileNotFoundError, json.JSONDecodeError):
-            return {"states": {}}
+            cache = {"states": {}}
+        self._nav_cache = cache
+        return cache
 
     def _update_rows(self) -> None:
         gpu = self._manager.get_gpu_stats()
@@ -309,6 +324,7 @@ class BotConsole:
         total_cpu = 0.0
         total_mem = 0
         running_count = 0
+        self._frames = {}
         for bot in self._manager.bots:
             r = self._rows.get(bot.name)
             if not r:
@@ -316,8 +332,9 @@ class BotConsole:
             self._manager._refresh_state(bot)
             glyph, state_text = self._status_glyph(bot)
             r["status"].config(text=f"{glyph} {state_text}", foreground=self._status_color(bot))
-            r["status_tip"].set_text(self._status_tooltip(bot))
             frame = self._read_frame(bot.display)
+            self._frames[bot.name] = frame
+            r["status_tip"].set_text(self._status_tooltip(bot, frame))
             loc = self._detect_location(bot, frame)
             r["loc"].config(text=loc or "?")
             runner = self._runners.get(bot.name)
@@ -358,18 +375,28 @@ class BotConsole:
                  f"CPU {total_cpu:.0f}%  MEM {total_mem}M"
         )
 
+    def _parse_shm_frame(self, buf: Any) -> np.ndarray | None:
+        import struct
+
+        if len(buf) < 16:
+            return None
+        try:
+            _c, w, h = struct.unpack("<QII", buf[:16])
+            return np.frombuffer(buf, dtype=np.uint8, offset=16).copy().reshape(h, w, 4)
+        except (struct.error, ValueError):
+            return None
+
     def _read_frame(self, display: int) -> np.ndarray | None:
         import mmap
-        import struct
 
         try:
             with open(f"/dev/shm/gt-spector-{display}-frame", "r+b") as f:
                 mm = mmap.mmap(f.fileno(), 0)
-                _c, w, h = struct.unpack("<QII", mm[:16])
-                data = np.frombuffer(mm, dtype=np.uint8, offset=16).copy().reshape(h, w, 4)
-                mm.close()
-                return data
-        except (FileNotFoundError, OSError, struct.error):
+                try:
+                    return self._parse_shm_frame(mm)
+                finally:
+                    mm.close()
+        except (FileNotFoundError, OSError, ValueError):
             return None
 
     def _on_overlay_global_toggle(self) -> None:
@@ -551,20 +578,21 @@ class BotConsole:
                 continue
             if runner and runner.script:
                 expected = getattr(runner.script, "expected_screen", None)
-                frame = self._read_frame(bot.display)
                 if expected:
-                    loc = self._detect_location(bot, frame)
-                    if loc not in (None, expected):
+                    loc = self._detect_location(bot, self._frames.get(bot.name))
+                    if self._needs_recovery(loc, expected):
                         logs.log_bot(bot.name, f"wrong screen {loc}, recovering")
                         self._monitor.recover(
                             bot, lambda b, s: self._runners[b.name].run_script(s), runner.script)
 
     def _poll(self) -> None:
+        self._nav_cache = None
         self._update_rows()
         self._monitor_tick()
         self._tk.after(2000, self._poll)
 
     def _on_close(self) -> None:
+        self._manager.stop_all()
         self._tk.destroy()
 
     def run(self) -> None:

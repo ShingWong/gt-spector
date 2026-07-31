@@ -95,6 +95,38 @@ def test_detect_location_match():
     assert c._detect_location(make_bot(), frame) == "ALLIANCE"
 
 
+@pytest.mark.parametrize(
+    "loc,expected,should",
+    [
+        (None, "ALLIANCE", False),
+        ("?", "ALLIANCE", False),
+        ("blank", "ALLIANCE", False),
+        ("ALLIANCE", "ALLIANCE", False),
+        ("LOBBY", "ALLIANCE", True),
+    ],
+)
+def test_needs_recovery(loc, expected, should):
+    assert make_console()._needs_recovery(loc, expected) is should
+
+
+def test_parse_shm_frame_empty():
+    assert make_console()._parse_shm_frame(b"") is None
+
+
+def test_parse_shm_frame_short():
+    assert make_console()._parse_shm_frame(b"\x01\x00" * 4) is None
+
+
+def test_parse_shm_frame_ok():
+    import struct
+
+    h, w = 2, 3
+    data = struct.pack("<QII", 1, w, h) + b"\x0a\x0b\x0c\xff" * (h * w)
+    frame = make_console()._parse_shm_frame(data)
+    assert frame is not None and frame.shape == (h, w, 4)
+    assert tuple(frame[0, 0]) == (10, 11, 12, 255)
+
+
 def test_nav_table_missing(tmp_path, monkeypatch):
     from pathlib import Path
 
