@@ -16,7 +16,6 @@ from gt_spector.bot_manager import Bot, BotManager, BotState
 from gt_spector.monitor import BotMonitor
 from gt_spector.script import ScriptRunner
 from gt_spector.scripts.help_bot import HelpBot
-from viewer.tooltip import ToolTip
 
 
 class _VlmAdapter:
@@ -115,8 +114,8 @@ class BotConsole:
         menubar.add_cascade(label="File", menu=file_menu)
 
         sel_menu = tk.Menu(menubar, tearoff=0)
-        sel_menu.add_command(label="Check All", command=self._check_all)
-        sel_menu.add_command(label="Uncheck All", command=self._uncheck_all)
+        sel_menu.add_command(label="Select All", command=self._check_all)
+        sel_menu.add_command(label="Clear Selection", command=self._uncheck_all)
         menubar.add_cascade(label="Selection", menu=sel_menu)
 
         act_menu = tk.Menu(menubar, tearoff=0)
@@ -195,73 +194,49 @@ class BotConsole:
         frame = ttk.Frame(self._tk)
         frame.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
         ttk.Label(frame, text="Bots", font=("", 11, "bold")).pack(anchor=tk.W)
-        canvas = tk.Canvas(frame, highlightthickness=0)
-        scroll = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=canvas.yview)
-        self._list_frame = ttk.Frame(canvas)
-        self._list_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=self._list_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scroll.set)
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self._columns = [
+            ("bot", "Bot", 90, tk.W),
+            ("account", "Account", 170, tk.W),
+            ("disp", "Disp", 50, tk.E),
+            ("status", "Status", 200, tk.W),
+            ("activity", "Activity", 140, tk.W),
+            ("loc", "Loc", 100, tk.W),
+            ("cr", "CR", 40, tk.E),
+            ("iv", "IV", 40, tk.E),
+            ("snd", "Snd", 40, tk.W),
+            ("cpu", "CPU", 50, tk.E),
+            ("mem", "Mem", 60, tk.E),
+            ("pid", "PID", 90, tk.E),
+        ]
+        self._tree = ttk.Treeview(
+            frame, columns=[c[0] for c in self._columns],
+            show="headings", selectmode="extended",
+        )
+        for key, text, width, anchor in self._columns:
+            self._tree.heading(key, text=text, anchor=anchor)
+            self._tree.column(key, width=width, minwidth=30, anchor=anchor)
+        for color in ("green", "gold", "blue", "red", "black"):
+            self._tree.tag_configure(color, foreground=color)
+        scroll = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=self._tree.yview)
+        self._tree.configure(yscrollcommand=scroll.set)
+        self._tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scroll.pack(side=tk.RIGHT, fill=tk.Y)
-        self._rows: dict[str, dict[str, Any]] = {}
+        self._tree.bind("<Double-1>", self._on_tree_double_click)
+        self._tree.bind("<Motion>", self._on_tree_motion)
+        self._tree.bind("<Leave>", self._on_tree_leave)
+        self._tooltips: dict[str, str] = {}
+        self._tree_tip: tk.Toplevel | None = None
+        self._tree_tip_label: ttk.Label | None = None
         self._runners: dict[str, ScriptRunner] = {}
         self._build_rows()
 
     def _build_rows(self) -> None:
-        for w in self._list_frame.winfo_children():
-            w.destroy()
-        self._rows.clear()
-        header = ttk.Frame(self._list_frame)
-        header.pack(fill=tk.X, pady=(0, 2))
-        for text, width, anchor in [
-            ("", 2, tk.CENTER), ("Bot", 8, tk.W), ("Account", 18, tk.W),
-            ("Disp", 5, tk.E), ("Status", 24, tk.W), ("Activity", 16, tk.W),
-            ("Loc", 12, tk.W), ("CR", 4, tk.E), ("IV", 4, tk.E),
-            ("Snd", 2, tk.W), ("CPU", 6, tk.E), ("Mem", 6, tk.E),
-            ("PID", 10, tk.E),
-        ]:
-            ttk.Label(header, text=text, width=width, anchor=anchor,
-                      font=("", 9, "bold")).pack(side=tk.LEFT)
-        ttk.Label(header, text="", width=5).pack(side=tk.RIGHT)
+        for item in self._tree.get_children():
+            self._tree.delete(item)
+        self._tooltips = {}
         for bot in self._manager.bots:
-            row = ttk.Frame(self._list_frame)
-            row.pack(fill=tk.X, pady=2)
-            var = tk.BooleanVar()
-            ttk.Checkbutton(row, variable=var, width=2).pack(side=tk.LEFT)
-            ttk.Label(row, text=bot.name, width=8, anchor=tk.W).pack(side=tk.LEFT)
-            acct = self._accounts.get(bot.name, "")
-            ttk.Label(row, text=acct, width=18, anchor=tk.W).pack(side=tk.LEFT)
-            ttk.Label(row, text=f":{bot.display}", width=5, anchor=tk.E).pack(side=tk.LEFT)
-            status_lbl = ttk.Label(row, width=24, anchor=tk.W)
-            status_lbl.pack(side=tk.LEFT)
-            status_tip = ToolTip(status_lbl, "")
-            activity_lbl = ttk.Label(row, width=16, anchor=tk.W)
-            activity_lbl.pack(side=tk.LEFT)
-            loc_lbl = ttk.Label(row, width=12, anchor=tk.W)
-            loc_lbl.pack(side=tk.LEFT)
-            cr_lbl = ttk.Label(row, width=4, anchor=tk.E)
-            cr_lbl.pack(side=tk.LEFT)
-            iv_lbl = ttk.Label(row, width=4, anchor=tk.E)
-            iv_lbl.pack(side=tk.LEFT)
-            snd_lbl = ttk.Label(row, width=2, anchor=tk.W)
-            snd_lbl.pack(side=tk.LEFT)
-            cpu_lbl = ttk.Label(row, width=6, anchor=tk.E)
-            cpu_lbl.pack(side=tk.LEFT)
-            mem_lbl = ttk.Label(row, width=6, anchor=tk.E)
-            mem_lbl.pack(side=tk.LEFT)
-            pid_lbl = ttk.Label(row, width=10, anchor=tk.E)
-            pid_lbl.pack(side=tk.LEFT)
-
-            def view_cmd(n: str = bot.name) -> None:
-                self._on_view(n)
-
-            ttk.Button(row, text="View", width=5, command=view_cmd).pack(side=tk.RIGHT, padx=1)
-            self._rows[bot.name] = {
-                "var": var, "status": status_lbl, "status_tip": status_tip,
-                "activity": activity_lbl, "loc": loc_lbl, "cr": cr_lbl,
-                "iv": iv_lbl, "snd": snd_lbl, "cpu": cpu_lbl, "mem": mem_lbl,
-                "pid": pid_lbl,
-            }
+            self._tree.insert("", tk.END, iid=bot.name,
+                              values=(bot.name, "", "", "", "", "", "", "", "", "", "", ""))
         self._update_rows()
 
     def _status_glyph(self, bot: Bot) -> tuple[str, str]:
@@ -345,53 +320,57 @@ class BotConsole:
         running_count = 0
         self._frames = {}
         for bot in self._manager.bots:
-            r = self._rows.get(bot.name)
-            if not r:
+            if not self._tree.exists(bot.name):
                 continue
             self._manager._refresh_state(bot)
             glyph, _ = self._status_glyph(bot)
             frame = self._read_frame(bot.display)
             self._frames[bot.name] = frame
-            r["status_tip"].set_text(self._status_tooltip(bot, frame))
+            self._tooltips[bot.name] = self._status_tooltip(bot, frame)
             loc = self._detect_location(bot, frame)
             if loc is None:
                 vlm_loc = self._monitor.vlm_tick(frame, bot, time.monotonic())
                 if vlm_loc:
                     self._vlm_screens[bot.name] = vlm_loc
                     loc = vlm_loc
-            r["loc"].config(text=loc or "?")
             runner = self._runners.get(bot.name)
             script = runner.script.name if runner and runner.script else ""
             status_text = self._status_text(script, loc)
-            r["status"].config(text=f"{glyph} {status_text}".rstrip(), foreground=self._status_color(bot))
+            activity = ""
             if runner and runner.script:
                 status = None
                 if frame is not None:
                     status = runner.tick(frame)
-                r["activity"].config(text=status or "")
-            else:
-                r["activity"].config(text="")
-            r["cr"].config(text=str(bot.crash_count))
-            r["iv"].config(text=str(bot.intervention_count))
+                activity = status or ""
             muted = audio.is_muted(bot.pid) if bot.pid else None
-            r["snd"].config(text="🔇" if muted is True else "🔊" if muted is False else "—")
+            cpu, mem, pid = "", "", ""
             if bot.state == BotState.RUNNING:
                 running_count += 1
                 s = self._manager.get_process_stats(bot)
                 if s:
-                    r["cpu"].config(text=f"{s['cpu_percent']:.0f}")
-                    r["mem"].config(text=f"{s['rss_mb']}M")
-                    r["pid"].config(text=str(s['pid']))
+                    cpu = f"{s['cpu_percent']:.0f}"
+                    mem = f"{s['rss_mb']}M"
+                    pid = str(s['pid'])
                     total_cpu += s['cpu_percent']
                     total_mem += s['rss_mb']
                 else:
-                    r["cpu"].config(text="")
-                    r["mem"].config(text="")
-                    r["pid"].config(text=str(bot.pid) if bot.pid else "")
+                    pid = str(bot.pid) if bot.pid else ""
             else:
-                r["cpu"].config(text="")
-                r["mem"].config(text="")
-                r["pid"].config(text=str(bot.pid) if bot.pid else "")
+                pid = str(bot.pid) if bot.pid else ""
+            self._tree.item(bot.name, tags=(self._status_color(bot),), values=(
+                bot.name,
+                self._accounts.get(bot.name, ""),
+                f":{bot.display}",
+                f"{glyph} {status_text}".rstrip(),
+                activity,
+                loc or "?",
+                str(bot.crash_count),
+                str(bot.intervention_count),
+                "🔇" if muted is True else "🔊" if muted is False else "—",
+                cpu,
+                mem,
+                pid,
+            ))
         self._status.config(
             text=f"GPU {gpu['gpu_busy_percent']:.0f}%  "
                  f"VRAM {gpu['vram_used_mb']}/{gpu['vram_total_mb']}M  "
@@ -400,6 +379,36 @@ class BotConsole:
                  f"| {running_count} bots  "
                  f"CPU {total_cpu:.0f}%  MEM {total_mem}M"
         )
+
+    def _on_tree_double_click(self, event: Any) -> None:
+        iid = self._tree.identify_row(event.y)
+        if iid:
+            self._on_view(iid)
+
+    def _on_tree_motion(self, event: Any) -> None:
+        iid = self._tree.identify_row(event.y)
+        text = self._tooltips.get(iid, "")
+        if not text:
+            self._hide_tree_tip()
+            return
+        x = self._tree.winfo_rootx() + event.x + 16
+        y = self._tree.winfo_rooty() + event.y + 16
+        if self._tree_tip is None:
+            self._tree_tip = tk.Toplevel(self._tree)
+            self._tree_tip.wm_overrideredirect(True)
+            self._tree_tip_label = ttk.Label(
+                self._tree_tip, background="#ffffe0", relief=tk.SOLID, borderwidth=1)
+            self._tree_tip_label.pack()
+        self._tree_tip_label.config(text=text)
+        self._tree_tip.wm_geometry(f"+{x}+{y}")
+
+    def _on_tree_leave(self, _event: Any = None) -> None:
+        self._hide_tree_tip()
+
+    def _hide_tree_tip(self) -> None:
+        if self._tree_tip is not None:
+            self._tree_tip.destroy()
+            self._tree_tip = None
 
     def _parse_shm_frame(self, buf: Any) -> np.ndarray | None:
         import struct
@@ -520,16 +529,14 @@ class BotConsole:
         self._status.config(text="Scripts stopped")
 
     def _get_checked(self) -> list[Bot]:
-        return [b for b in self._manager.bots
-                if self._rows.get(b.name, {}).get("var", tk.BooleanVar()).get()]
+        selected = set(self._tree.selection())
+        return [b for b in self._manager.bots if b.name in selected]
 
     def _check_all(self) -> None:
-        for r in self._rows.values():
-            r["var"].set(True)
+        self._tree.selection_set(self._tree.get_children())
 
     def _uncheck_all(self) -> None:
-        for r in self._rows.values():
-            r["var"].set(False)
+        self._tree.selection_remove(self._tree.get_children())
 
     def _on_view(self, name: str) -> None:
         bot = self._manager.get(name)
