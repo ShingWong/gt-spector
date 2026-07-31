@@ -313,8 +313,21 @@ def test_on_close_saves_geometry(tmp_path, monkeypatch):
                             "destroy": lambda self: calls.append("destroy")})()
     c._manager = type("M", (), {"stop_all": lambda self: calls.append("stop_all")})()
     c._on_close()
-    assert calls == ["stop_all", "destroy"]
+    assert calls == ["destroy"]
     assert (tmp_path / ".config" / "gt-spector" / "console_geometry.json").exists()
+
+
+def test_on_close_does_not_stop_games(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    c = make_console()
+    calls = []
+    c._tk = type("Tk", (), {"geometry": lambda self: "600x500+5+5",
+                            "destroy": lambda self: calls.append("destroy")})()
+    c._manager = type("M", (), {"stop_all": lambda self: calls.append("stop_all")})()
+    c._on_close()
+    assert "stop_all" not in calls
 
 
 @pytest.mark.parametrize(

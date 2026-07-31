@@ -625,7 +625,6 @@ class BotConsole:
 
     def _on_close(self) -> None:
         self._save_geometry()
-        self._manager.stop_all()
         self._tk.destroy()
 
     def run(self) -> None:
