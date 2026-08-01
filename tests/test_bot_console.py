@@ -34,7 +34,7 @@ def test_status_glyph(state, expected):
 @pytest.mark.parametrize("script,loc,expected", [
     ("help_bot", "LOBBY", "help_bot @ LOBBY"),
     ("help_bot", None, "help_bot @ ?"),
-    ("", "LOBBY", "LOBBY"),
+    ("", "LOBBY", ""),
     ("", None, ""),
     ("", "?", ""),
 ])

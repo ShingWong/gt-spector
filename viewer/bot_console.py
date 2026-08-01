@@ -268,11 +268,9 @@ class BotConsole:
 
     @staticmethod
     def _status_text(script: str, loc: str | None) -> str:
-        """Script + map for the status column. State words live in the glyph."""
+        """Script + map for the status column. Map alone lives in the Loc column."""
         if script:
             return f"{script} @ {loc or '?'}"
-        if loc and loc != "?":
-            return loc
         return ""
 
     def _status_tooltip(self, bot: Bot, frame: np.ndarray | None = None) -> str:
