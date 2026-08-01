@@ -47,6 +47,7 @@ class BotConsole:
         self._nav_cache: dict[str, Any] | None = None
         self._vlm_screens: dict[str, str] = {}
         self._sound_applied: dict[str, int] = {}
+        self._vlm_stop = False
 
         self._tk = tk.Tk()
         self._tk.title("gt-spector — Bot Console")
@@ -59,6 +60,7 @@ class BotConsole:
 
         self._poll()
         self._tk.protocol("WM_DELETE_WINDOW", self._on_close)
+        self._start_vlm_worker()
 
     def _geometry_path(self) -> Path:
         return Path.home() / ".config" / "gt-spector" / "console_geometry.json"
@@ -241,7 +243,7 @@ class BotConsole:
         self._tooltips = {}
         for bot in self._manager.bots:
             self._tree.insert("", tk.END, iid=bot.name,
-                              values=("☐", bot.name, "", "", "", "", "", "", "", "", "", "", "", "View"))
+                              values=("☐", bot.name, "", "", "", "", "", "", "", "", "", "", "", "[View]"))
         self._update_rows()
 
     def _status_glyph(self, bot: Bot) -> tuple[str, str]:
@@ -370,7 +372,7 @@ class BotConsole:
                 cpu,
                 mem,
                 pid,
-                "View",
+                "[View]",
             ))
         self._status.config(
             text=f"GPU {gpu['gpu_busy_percent']:.0f}%  "
@@ -413,6 +415,12 @@ class BotConsole:
 
     def _on_tree_motion(self, event: Any) -> None:
         iid = self._tree.identify_row(event.y)
+        col = self._tree.identify_column(event.x)
+        key = self._columns[int(col[1:]) - 1][0] if col.startswith("#") else None
+        if key == "view":
+            self._tree.configure(cursor="hand2")
+        else:
+            self._tree.configure(cursor="")
         text = self._tooltips.get(iid, "")
         if not text:
             self._hide_tree_tip()
@@ -642,19 +650,32 @@ class BotConsole:
         self._status = ttk.Label(self._tk, text="Ready", relief=tk.SUNKEN, anchor=tk.W)
         self._status.pack(side=tk.BOTTOM, fill=tk.X)
 
-    def _vlm_status_tick(self) -> None:
-        """Classify running bots via VLM on the settable interval, gated on GPU headroom."""
+    def _start_vlm_worker(self) -> None:
+        """Background thread: classify running bots on the settable interval."""
+        import threading
+
+        self._vlm_stop = False
+
+        def worker() -> None:
+            while not self._vlm_stop:
+                time.sleep(settings.vlm_interval())
+                try:
+                    self._vlm_worker_tick()
+                except Exception as e:  # noqa: BLE001 - never kill the worker
+                    logs.log_system(f"vlm worker error: {e}")
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _vlm_worker_tick(self) -> None:
+        """One VLM classification pass, called from the background thread."""
         gpu = self._manager.get_gpu_stats()
         if not monitor.gpu_slot_free(gpu):
             return
-        now = time.monotonic()
         for bot in self._manager.bots:
             if bot.state != BotState.RUNNING or not bot.pid:
                 continue
             frame = self._frames.get(bot.name)
             if frame is None:
-                continue
-            if not self._monitor.should_vlm_check(bot, now):
                 continue
             vlm_loc = self._monitor.classify_frame(frame, bot.display)
             if vlm_loc:
@@ -695,11 +716,11 @@ class BotConsole:
     def _poll(self) -> None:
         self._nav_cache = None
         self._update_rows()
-        self._vlm_status_tick()
         self._monitor_tick()
         self._tk.after(2000, self._poll)
 
     def _on_close(self) -> None:
+        self._vlm_stop = True
         self._save_geometry()
         self._tk.destroy()
 

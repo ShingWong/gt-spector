@@ -64,8 +64,10 @@ def test_mark_crash_and_intervention(tmp_path, monkeypatch):
     assert bot.intervention_count == 1
 
 
-def test_should_vlm_check_throttled():
+def test_should_vlm_check_throttled(monkeypatch):
+    from gt_spector import settings
     from gt_spector.monitor import BotMonitor
+    monkeypatch.setattr(settings, "vlm_interval", lambda: 10.0)
     m = BotMonitor(None)
     bot = type("B", (), {"name": "bot01"})()
     now = 100.0
