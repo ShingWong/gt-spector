@@ -196,6 +196,7 @@ class BotConsole:
         frame.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
         ttk.Label(frame, text="Bots", font=("", 11, "bold")).pack(anchor=tk.W)
         self._columns = [
+            ("sel", "✓", 30, tk.CENTER),
             ("bot", "Bot", 90, tk.W),
             ("account", "Account", 170, tk.W),
             ("disp", "Disp", 50, tk.E),
@@ -208,6 +209,7 @@ class BotConsole:
             ("cpu", "CPU", 50, tk.E),
             ("mem", "Mem", 60, tk.E),
             ("pid", "PID", 90, tk.E),
+            ("view", "View", 50, tk.CENTER),
         ]
         self._tree = ttk.Treeview(
             frame, columns=[c[0] for c in self._columns],
@@ -222,7 +224,9 @@ class BotConsole:
         self._tree.configure(yscrollcommand=scroll.set)
         self._tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self._tree.bind("<Button-1>", self._on_tree_click)
         self._tree.bind("<Double-1>", self._on_tree_double_click)
+        self._tree.bind("<<TreeviewSelect>>", self._on_tree_select)
         self._tree.bind("<Motion>", self._on_tree_motion)
         self._tree.bind("<Leave>", self._on_tree_leave)
         self._tooltips: dict[str, str] = {}
@@ -237,7 +241,7 @@ class BotConsole:
         self._tooltips = {}
         for bot in self._manager.bots:
             self._tree.insert("", tk.END, iid=bot.name,
-                              values=(bot.name, "", "", "", "", "", "", "", "", "", "", ""))
+                              values=("☐", bot.name, "", "", "", "", "", "", "", "", "", "", "", "View"))
         self._update_rows()
 
     def _status_glyph(self, bot: Bot) -> tuple[str, str]:
@@ -353,7 +357,9 @@ class BotConsole:
                     pid = str(bot.pid) if bot.pid else ""
             else:
                 pid = str(bot.pid) if bot.pid else ""
+            sel = "☑" if bot.name in set(self._tree.selection()) else "☐"
             self._tree.item(bot.name, tags=(self._status_color(bot),), values=(
+                sel,
                 bot.name,
                 self._accounts.get(bot.name, ""),
                 f":{bot.display}",
@@ -366,6 +372,7 @@ class BotConsole:
                 cpu,
                 mem,
                 pid,
+                "View",
             ))
         self._status.config(
             text=f"GPU {gpu['gpu_busy_percent']:.0f}%  "
@@ -375,6 +382,31 @@ class BotConsole:
                  f"| {running_count} bots  "
                  f"CPU {total_cpu:.0f}%  MEM {total_mem}M"
         )
+
+    def _on_tree_click(self, event: Any) -> str | None:
+        iid = self._tree.identify_row(event.y)
+        if not iid:
+            return None
+        col = self._tree.identify_column(event.x)
+        key = self._columns[int(col[1:]) - 1][0] if col.startswith("#") else None
+        if key == "sel":
+            self._toggle_selected(iid)
+            return "break"
+        if key == "view":
+            self._on_view(iid)
+            return "break"
+        return None
+
+    def _toggle_selected(self, iid: str) -> None:
+        selected = set(self._tree.selection())
+        if iid in selected:
+            selected.discard(iid)
+        else:
+            selected.add(iid)
+        self._tree.selection_set(*selected)
+
+    def _on_tree_select(self, _event: Any = None) -> None:
+        self._update_rows()
 
     def _on_tree_double_click(self, event: Any) -> None:
         iid = self._tree.identify_row(event.y)

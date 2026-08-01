@@ -284,6 +284,17 @@ def test_monitor_tick_reapplies_sound_on_pid_change(tmp_path, monkeypatch):
     assert applied == [111, 222]
 
 
+def test_tree_columns_include_sel_and_view():
+    c = make_console()
+    c._columns = [
+        ("sel", "✓", 30, "center"), ("bot", "Bot", 90, "w"),
+        ("view", "View", 50, "center"),
+    ]
+    keys = [k for k, *_ in c._columns]
+    assert "sel" in keys and "view" in keys
+    assert keys.index("sel") < keys.index("bot") < keys.index("view")
+
+
 def test_monitor_tick_crash_restarts_game(tmp_path, monkeypatch):
     from gt_spector import logs
 
