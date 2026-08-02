@@ -15,6 +15,7 @@ import tempfile
 import time
 
 BASE_DIR = "/home/swong/dls/wineprefix_bots"
+LOGIN_DIR = "/home/swong/dls/wineprefix_login"
 GAME_BASE = "/home/swong/dls/game-base/Doomsday_1.59.0"
 WINE_BIN = "/opt/wine-proton/bin/wine"
 WINEBOOT = "/opt/wine-proton/bin/wineboot"
@@ -37,6 +38,7 @@ def main():
     sub.add_parser("destroy", help="Remove a prefix").add_argument("name")
     sub.add_parser("list", help="List all prefixes")
     sub.add_parser("update", help="Update game files from game-base")
+    sub.add_parser("login", help="Provision the dedicated login prefix (wineprefix_login)")
 
     args = parser.parse_args()
     if args.cmd == "init":
@@ -47,6 +49,8 @@ def main():
         cmd_list()
     elif args.cmd == "update":
         cmd_update()
+    elif args.cmd == "login":
+        cmd_login()
 
 def _prefix_path(name: str) -> str:
     return os.path.join(BASE_DIR, name)
@@ -213,6 +217,67 @@ def cmd_init(name: str, account: str, reg_path: str | None, appdata: str | None 
         "prefix": dest,
         "display": _display_num(name),
     }
+
+
+def cmd_login():
+    """Provision the dedicated login prefix (wineprefix_login).
+
+    This slot is used only for interactive login: run the game, log into an
+    account via the embedded browser, then harvest the fresh registry + VITAL
+    files with the harvest script. No account session is installed here.
+    """
+    dest = LOGIN_DIR
+    if os.path.exists(os.path.join(dest, "drive_c")):
+        print(f"Login prefix already exists at {dest}")
+        return
+
+    os.makedirs(dest, exist_ok=True)
+    print("Creating login prefix...")
+
+    subprocess.run([WINEBOOT, "-u"], env={"WINEPREFIX": dest},
+                   capture_output=True, timeout=120, check=False)
+    time.sleep(3)
+
+    game_dir = os.path.join(dest, "drive_c", "Program Files", "DoomsdayLastSurvivors")
+    os.makedirs(game_dir, exist_ok=True)
+    ver_dir = os.path.join(game_dir, "Doomsday_1.59.0")
+
+    print("Copying game files...")
+    shutil.copytree(GAME_BASE, ver_dir, symlinks=True, dirs_exist_ok=True)
+
+    dst_x86 = os.path.join(dest, "drive_c", "windows", "system32")
+    for dll in (os.path.join(DXVK_SRC, "d3d11", "d3d11.dll"),
+                os.path.join(DXVK_SRC, "dxgi", "dxgi.dll")):
+        if not os.path.exists(dll):
+            print(f"WARNING: {dll} not found (DXVK not built?)")
+            continue
+        shutil.copy2(dll, os.path.join(dst_x86, os.path.basename(dll)))
+
+    subprocess.run([WINE_BIN, "reg", "add", "HKCU\\Software\\Wine\\DllOverrides",
+                    "/v", "d3d11", "/t", "REG_SZ", "/d", "native", "/f"],
+                   env={"WINEPREFIX": dest}, capture_output=True, check=False)
+    subprocess.run([WINE_BIN, "reg", "add", "HKCU\\Software\\Wine\\DllOverrides",
+                    "/v", "dxgi", "/t", "REG_SZ", "/d", "native", "/f"],
+                   env={"WINEPREFIX": dest}, capture_output=True, check=False)
+
+    _force_resolution(dest)
+    _install_fonts(dest)
+    print(f"✓ Login prefix ready at {dest}")
+
+
+def _install_fonts(dest: str) -> None:
+    """Copy host fonts into the prefix so the embedded browser renders text."""
+    fonts_dir = os.path.join(dest, "drive_c", "windows", "Fonts")
+    os.makedirs(fonts_dir, exist_ok=True)
+    for f in ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+              "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+              "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
+              "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+              "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+              "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf"):
+        if os.path.exists(f):
+            shutil.copy2(f, os.path.join(fonts_dir, os.path.basename(f)))
+    print(f"Installed fonts into {fonts_dir}")
 
 def cmd_destroy(name: str):
     dest = _prefix_path(name)
