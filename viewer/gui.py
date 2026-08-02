@@ -28,6 +28,7 @@ class ViewerWindow:
         self._marker_pick_mode = False
         self._skip_release = False
         self._last_redraw = 0.0
+        self._last_frame_sample: bytes | None = None
         self._tk.geometry("1152x914")
         self._scale = 1.0
         self._frame_counter = 0
@@ -214,9 +215,17 @@ class ViewerWindow:
             frame = self._session.frame
             h, w = frame.shape[:2]
             now = _time.monotonic()
-            # Throttle redraws so the Tk mainloop stays responsive for input
-            # even when the game renders fast. ~15 fps is plenty for viewing.
-            if shm_changed and (now - self._last_redraw) >= 0.066:
+            # Only redraw when the actual pixel content changed (the game can
+            # advance its frame counter on a static screen) AND the throttle
+            # allows it. A cheap strided sample detects change without a full
+            # compare; the expensive conversion happens only on real changes.
+            changed = False
+            if shm_changed:
+                sample = frame[::32, ::32].tobytes()
+                changed = sample != getattr(self, "_last_frame_sample", None)
+                if changed:
+                    self._last_frame_sample = sample
+            if changed and (now - self._last_redraw) >= 0.066:
                 self._last_redraw = now
                 frame = overlay.draw_markers(frame, self._display_num())
                 self._tk.update_idletasks()
