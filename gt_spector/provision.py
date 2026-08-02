@@ -19,7 +19,7 @@ WINE_BIN = "/opt/wine-proton/bin/wine"
 WINEBOOT = "/opt/wine-proton/bin/wineboot"
 SESSION_TEMPLATE = "/home/swong/dls/tmp/sr02-05/full.reg"
 PROTON_SRC = "/home/swong/dls/wineprefix_proton"
-DXVK_SRC = "/tmp/dxvk-source-2.5.3/build-win64/src"
+DXVK_SRC = "/home/swong/dls/dxvk/dxvk-source-2.5.3/build-win64/src"
 
 def main():
     parser = argparse.ArgumentParser(description="Bot prefix provisioner")

@@ -5,8 +5,10 @@
 GPU readback + viewer + bot API for headless DLS game farm. Python library with C/C++ acceleration (numpy, PIL, OpenCV). DXVK readback (C++) writes raw frames to SHM; Python reads via mmap.
 
 **Root project:** `/home/swong/dls/gt-spector/`
-**DXVK build:** `/tmp/dxvk-source-2.5.3/`
+**DXVK build:** `/home/swong/dls/dxvk/dxvk-source-2.5.3/`
+**DXVK patches/notes:** `/home/swong/dls/src/dxvk-patch/`
 **DXVK experiments:** `/home/swong/dls/dxvk-test1/`
+**SHM color format:** RGBA (R@byte0, G@byte1, B@byte2, A@byte3) — verified against user-observed display colors. DXVK docs say BGRA but actual bytes are RGBA.
 
 ## Available Skills
 
@@ -58,10 +60,17 @@ Before marking done: build passes, tests pass, lint passes, self-review, clean c
 ## DXVK Build (separate)
 
 ```bash
-cd /tmp/dxvk-source-2.5.3/build-win64 && ninja -j4
+cd /home/swong/dls/dxvk/dxvk-source-2.5.3/build-win64 && ninja -j4
 cp src/d3d11/d3d11.dll src/dxgi/dxgi.dll src/d3d10/d3d10core.dll \
   /home/swong/dls/wineprefix_dls/drive_c/windows/system32/
 ```
+
+## DXVK Patch (required to run headless)
+
+The project depends on a patched DXVK (offscreen swapchain). Patch + notes:
+`/home/swong/dls/src/dxvk-patch/` — apply per `dxvk-offscreen-README.txt`.
+The patched DLLs are copied into prefixes by `gt_spector/provision.py`
+(`DXVK_SRC`).
 
 ## MCP Servers
 

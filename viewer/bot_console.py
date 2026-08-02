@@ -616,10 +616,9 @@ class BotConsole:
         """Map an account email to its session .reg file, or None."""
         local = email.split("@")[0].strip().lower()
         candidates = [
-            f"/tmp/igg_sessions/{local}/igg_session.reg",
+            f"/home/swong/dls/tmp/igg_sessions/{local}/igg_session.reg",
             f"/home/swong/dls/reg-sessions/{local}.reg",
-            f"/tmp/igg_{local.replace('sr0', 'sr0')}_full.reg",
-            f"/tmp/igg_{local}_full.reg",
+            f"/home/swong/dls/tmp/igg_{local}_full.reg",
         ]
         for p in candidates:
             if os.path.exists(p):
