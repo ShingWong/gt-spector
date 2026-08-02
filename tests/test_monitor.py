@@ -210,7 +210,25 @@ def test_check_responsiveness_stalled_counter_after_grace(monkeypatch, tmp_path)
     m = monitor.BotMonitor(None)
     bot = type("B", (), {"name": "bot01", "pid": 111, "shm_path": str(shm)})()
     m.note_running(bot, 100.0)
-    assert m.check_responsiveness(bot, 161.0) is False
+    # A single stalled sample is NOT a crash (tolerates brief frame stalls).
+    assert m.check_responsiveness(bot, 161.0) is True
+    assert m.check_responsiveness(bot, 162.0) is True
+    # Persistent stall across the consecutive-poll limit IS a crash.
+    assert m.check_responsiveness(bot, 163.0) is False
+
+
+def test_check_responsiveness_recovers_after_stall(monkeypatch):
+    from gt_spector import monitor
+    monkeypatch.setattr(monitor.time, "sleep", lambda _: None)
+    m = monitor.BotMonitor(None)
+    values = iter([42, 42, 42, 42, 43, 44])
+    m._read_counter = lambda path: next(values)
+    bot = type("B", (), {"name": "bot01", "pid": 111, "shm_path": "/dev/shm/x"})()
+    m.note_running(bot, 100.0)
+    # Two stalls (42,42 each), then an advance (43,44) -> healthy again.
+    assert m.check_responsiveness(bot, 161.0) is True
+    assert m.check_responsiveness(bot, 162.0) is True
+    assert m.check_responsiveness(bot, 163.0) is True
 
 
 def test_check_responsiveness_advancing_counter_after_grace(monkeypatch):
