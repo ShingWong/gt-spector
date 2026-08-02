@@ -201,34 +201,51 @@ def test_check_responsiveness_within_grace_stalled_counter(monkeypatch, tmp_path
 
 
 def test_check_responsiveness_stalled_counter_after_grace(monkeypatch, tmp_path):
-    import struct
-
     from gt_spector import monitor
     monkeypatch.setattr(monitor.time, "sleep", lambda _: None)
-    shm = tmp_path / "frame"
-    shm.write_bytes(struct.pack("<Q", 42))
     m = monitor.BotMonitor(None)
-    bot = type("B", (), {"name": "bot01", "pid": 111, "shm_path": str(shm)})()
+    # Frame advances at t=170 (42->43), then goes quiet (43,43,...).
+    values = iter([42, 43, 43, 43, 43, 43])
+    m._read_counter = lambda path: next(values)
+    bot = type("B", (), {"name": "bot01", "pid": 111, "shm_path": "/dev/shm/x"})()
     m.note_running(bot, 100.0)
-    # A single stalled sample is NOT a crash (tolerates brief frame stalls).
-    assert m.check_responsiveness(bot, 161.0) is True
-    assert m.check_responsiveness(bot, 162.0) is True
-    # Persistent stall across the consecutive-poll limit IS a crash.
-    assert m.check_responsiveness(bot, 163.0) is False
+    # Frame produced at 170 -> healthy.
+    assert m.check_responsiveness(bot, 170.0) is True
+    # Stall within STALL_TIMEOUT (30s) after the last frame is tolerated.
+    assert m.check_responsiveness(bot, 185.0) is True
+    # Stall beyond STALL_TIMEOUT is a crash.
+    assert m.check_responsiveness(bot, 205.0) is False
 
 
 def test_check_responsiveness_recovers_after_stall(monkeypatch):
     from gt_spector import monitor
     monkeypatch.setattr(monitor.time, "sleep", lambda _: None)
     m = monitor.BotMonitor(None)
-    values = iter([42, 42, 42, 42, 43, 44])
+    # Advance at 180 (40->41), then two stalls, then advance again.
+    values = iter([40, 41, 42, 42, 42, 42, 43, 44])
     m._read_counter = lambda path: next(values)
     bot = type("B", (), {"name": "bot01", "pid": 111, "shm_path": "/dev/shm/x"})()
     m.note_running(bot, 100.0)
-    # Two stalls (42,42 each), then an advance (43,44) -> healthy again.
-    assert m.check_responsiveness(bot, 161.0) is True
-    assert m.check_responsiveness(bot, 162.0) is True
-    assert m.check_responsiveness(bot, 163.0) is True
+    assert m.check_responsiveness(bot, 180.0) is True  # advance
+    # Stalls within timeout tolerated.
+    assert m.check_responsiveness(bot, 185.0) is True
+    assert m.check_responsiveness(bot, 186.0) is True
+    # Recovery: an advance resets the clock -> healthy.
+    assert m.check_responsiveness(bot, 187.0) is True
+
+
+def test_check_responsiveness_dead_process_crashed(monkeypatch, tmp_path):
+    import struct
+
+    from gt_spector import monitor
+    monkeypatch.setattr(monitor.time, "sleep", lambda _: None)
+    shm = tmp_path / "frame"
+    shm.write_bytes(struct.pack("<Q", 42))
+    manager = type("M", (), {"_pid_alive": lambda self, pid: False})()
+    m = monitor.BotMonitor(manager)
+    bot = type("B", (), {"name": "bot01", "pid": 111, "shm_path": str(shm)})()
+    m.note_running(bot, 100.0)
+    assert m.check_responsiveness(bot, 161.0) is False
 
 
 def test_check_responsiveness_advancing_counter_after_grace(monkeypatch):

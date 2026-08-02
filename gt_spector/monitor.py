@@ -58,10 +58,11 @@ STARTUP_GRACE = 60.0
 
 MAX_RECOVERY_ATTEMPTS = 3
 
-# Consecutive unresponsive polls (2s each) before a game is declared crashed.
-# A single 0.4s frame stall (shader recompile, loading screen, heavy frame)
-# is NOT a crash; require ~6s+ of no SHM counter movement.
-UNRESPONSIVE_LIMIT = 3
+# Seconds the SHM frame counter may go without advancing before a game is
+# declared crashed. Long loading screens and shader recompiles can stall
+# rendering for many seconds; only a sustained stall (or a dead process)
+# is treated as a crash.
+STALL_TIMEOUT = 30.0
 
 GPU_BUSY_MAX = 85.0
 
@@ -99,7 +100,7 @@ class BotMonitor:
         self._started_at: dict[str, float] = {}
         self._seen_pid: dict[str, int | None] = {}
         self._recovery_attempts: dict[str, int] = {}
-        self._unresponsive: dict[str, int] = {}
+        self._last_advance: dict[str, float] = {}
 
     def _read_counter(self, shm_path: str) -> int | None:
         try:
@@ -114,23 +115,30 @@ class BotMonitor:
         if pid != self._seen_pid.get(bot.name):
             self._started_at[bot.name] = now
             self._recovery_attempts.pop(bot.name, None)
-            self._unresponsive[bot.name] = 0
+            self._last_advance[bot.name] = now
         self._seen_pid[bot.name] = pid
 
     def check_responsiveness(self, bot: Any, now: float) -> bool:
+        """True while the game is alive and producing frames.
+
+        A game is only considered crashed when its process is gone, or when
+        no frame has been produced for STALL_TIMEOUT seconds. Brief stalls
+        (shader recompile, loading new content, heavy frames) are tolerated.
+        """
         if now - self._started_at.get(bot.name, now) < STARTUP_GRACE:
             return True
+        if bot.pid and self._manager and not self._manager._pid_alive(bot.pid):
+            return False
         c0 = self._read_counter(bot.shm_path)
         if c0 is None:
             return False
         time.sleep(0.4)
         c1 = self._read_counter(bot.shm_path)
-        stalled = c1 is None or c1 == c0
-        if stalled:
-            self._unresponsive[bot.name] = self._unresponsive.get(bot.name, 0) + 1
-            return self._unresponsive[bot.name] < UNRESPONSIVE_LIMIT
-        self._unresponsive[bot.name] = 0
-        return True
+        if c1 is None:
+            return False
+        if c1 != c0:
+            self._last_advance[bot.name] = now
+        return (now - self._last_advance.get(bot.name, now)) < STALL_TIMEOUT
 
     def mark_crash(self, bot: Any) -> None:
         bot.crash_count += 1
