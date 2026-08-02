@@ -99,6 +99,22 @@ def _force_resolution(dest: str) -> None:
     print("Applied game settings (1152x864, low quality)")
 
 
+def _copy_game_tree(src: str, dst: str) -> None:
+    """Clone the game install into a prefix, sharing data via btrfs reflink.
+
+    The game files are ~4.5G; a normal copy would use 4.5G per bot (135G for
+    30 bots). Reflink (CoW) shares the data blocks with GAME_BASE until a file
+    is written, so 30 bots use ~0 added disk while each can still write safely
+    (CoW handles diverging files). Falls back to a normal copy if reflink is
+    unsupported.
+    """
+    r = subprocess.run(["cp", "-a", "--reflink=always", src, dst],
+                       capture_output=True, check=False)
+    if r.returncode != 0:
+        # Fallback: plain copy (cross-device / non-CoW filesystems)
+        shutil.copytree(src, dst, symlinks=True, dirs_exist_ok=True)
+
+
 def cmd_init(name: str, account: str | None = None):
     dest = _prefix_path(name)
     if os.path.exists(os.path.join(dest, "drive_c")):
@@ -117,7 +133,7 @@ def cmd_init(name: str, account: str | None = None):
     ver_dir = os.path.join(game_dir, "Doomsday_1.59.0")
 
     print("Copying game files...")
-    shutil.copytree(GAME_BASE, ver_dir, symlinks=True, dirs_exist_ok=True)
+    _copy_game_tree(GAME_BASE, ver_dir)
 
     src_x86 = os.path.join(DXVK_SRC, "d3d11", "d3d11.dll"), os.path.join(DXVK_SRC, "dxgi", "dxgi.dll")
     dst_x86 = os.path.join(dest, "drive_c", "windows", "system32")
@@ -136,6 +152,7 @@ def cmd_init(name: str, account: str | None = None):
 
     _force_resolution(dest)
     _install_fonts(dest)
+    os.makedirs(os.path.join(dest, "dxvk-cache"), exist_ok=True)
 
     print(f"✓ Prefix {name} ready (login via the in-game browser)")
     return {

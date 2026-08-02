@@ -202,8 +202,12 @@ class BotManager:
                "DXVK_WSI_DRIVER": "None",
                "MESA_GLSL_CACHE_DISABLE": "true",
                "vblank_mode": "0",
+               # Per-bot DXVK state cache (shader pipeline cache). Stored
+               # outside the (reflinked) game dir so it's writable and
+               # isolated per bot; the mesa GPL cache shares compiled
+               # pipelines across all bots.
+               "DXVK_STATE_CACHE_PATH": os.path.join(bot.prefix, "dxvk-cache"),
         }
-        self._apply_game_settings(bot)
         proc = subprocess.Popen(
             [WINE_BIN, "Doomsday.exe",
              "-screen-width", "1152", "-screen-height", "864",
@@ -214,46 +218,6 @@ class BotManager:
         )
         bot.pid = proc.pid
         time.sleep(3)
-
-    GAME_SETTINGS_REG = r"""Windows Registry Editor Version 5.00
-
-[HKEY_CURRENT_USER\Software\IGG\Doomsday: Last Survivors]
-"Screenmanager Resolution Width Default_h680557497"=dword:00000500
-"Screenmanager Resolution Height Default_h1380706816"=dword:000002d0
-"Screenmanager Resolution Use Native Default_h1405981789"=dword:00000001
-"Screenmanager Fullscreen mode Default_h401710285"=dword:00000003
-"Screenmanager Resolution Width_h182942802"=dword:00000480
-"Screenmanager Resolution Window Width_h2524650974"=dword:00000480
-"Screenmanager Resolution Height_h2627697771"=dword:00000360
-"Screenmanager Resolution Window Height_h1684712807"=dword:00000360
-"Screenmanager Resolution Use Native_h1405027254"=dword:00000000
-"Screenmanager Fullscreen mode_h3630240806"=dword:00000003
-"UnityGraphicsQuality_h1669003810"=dword:00000000
-"PCResolution_h240614520"=hex:31,31,35,32,7c,38,36,34,7c,30,00
-"""
-
-    def _apply_game_settings(self, bot: Bot) -> None:
-        """Force the game's saved settings to 1152x864, low quality (windowed).
-
-        Unity overrides the -screen-height launch arg with registry-stored
-        resolution; a copied session reg can leave it at 720, making every
-        coordinate below y=720 off-frame (clicks don't register). Import the
-        known-good settings from the Windows VM before each launch.
-        """
-        import tempfile
-        with tempfile.NamedTemporaryFile("w", suffix=".reg", delete=False) as f:
-            f.write(self.GAME_SETTINGS_REG)
-            reg_path = f.name
-        try:
-            subprocess.run(
-                [WINE_BIN, "reg", "import", reg_path],
-                env={"WINEPREFIX": bot.prefix},
-                capture_output=True, timeout=60, check=False)
-        finally:
-            try:
-                os.remove(reg_path)
-            except OSError:
-                pass
 
     def stop_game(self, bot: Bot) -> None:
         if bot.pid and self._pid_alive(bot.pid):
