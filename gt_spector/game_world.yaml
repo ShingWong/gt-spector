@@ -1,0 +1,100 @@
+# Game world knowledge database for Doomsday: Last Survivors.
+# Human-editable. The module gt_spector/game_world.py reads this.
+
+version: 1
+
+# Named clickable locations. Each: x, y, and the screens it appears on.
+# Static UI chrome is reliable. "drifts" marks world-scoped anchors that may
+# move with the camera but are tracked for reference.
+locations:
+  login_failed_ok:   {x: 499, y: 647, screens: [login_failed_dialog]}
+  login_failed_device_login: {x: 420, y: 767, screens: [login_failed_dialog]}
+  login_failed_more: {x: 558, y: 767, screens: [login_failed_dialog]}
+  afk_ok:            {x: 741, y: 676, screens: [afk_popup]}
+  glory_league_go:   {x: 575, y: 654, screens: [glory_league_event]}
+  player_avatar:     {x: 48,  y: 44,  screens: [world_map, world_map_regional]}
+  shelter:           {x: 65,  y: 800, screens: [world_map, world_map_regional]}
+  map_search:        {x: 38,  y: 623, screens: [world_map, world_map_regional]}
+  chat:              {x: 150, y: 800, screens: [world_map, world_map_regional]}
+  vip_menu:          {x: 113, y: 56,  screens: [world_map, world_map_regional]}
+  region_overview:   {x: 1120, y: 800, screens: [world_map, world_map_regional]}
+  messages:          {x: 1120, y: 745, screens: [world_map, world_map_regional]}
+  region_search:     {x: 439, y: 15,  screens: [world_map, world_map_regional]}
+  alliance_flags:    {x: 485, y: 21,  screens: [world_map, world_map_regional]}
+  mission_menu:      {x: 40,  y: 680, screens: [world_map]}
+  radar_station:     {x: 103, y: 616, screens: [world_map], drifts: true}
+  alliance_menu:     {x: 960, y: 800, screens: [world_map], drifts: true}
+  hero_menu:         {x: 1040, y: 800, screens: [world_map], drifts: true}
+  bag_menu:          {x: 975, y: 800, screens: [world_map], drifts: true}
+  campaign_menu:     {x: 800, y: 800, screens: [world_map], drifts: true}
+
+# World zones on the regional map: zone_1 outer, zone_2 middle, zone_3 center.
+zones:
+  zone_1: {name: "outer ring", note: "outside edge of the region"}
+  zone_2: {name: "mid ring",   note: "between zone 1 and zone 3"}
+  zone_3: {name: "center",     note: "center part of the region"}
+
+# Map zoom levels. The discriminator between them is the minimap presence in
+# the top-right corner (regional zoom shows it; world map does not).
+map_levels:
+  world_map:
+    description: zoomed in, no minimap, actors/vehicles/zombies visible
+    fingerprint:
+      # No minimap in top-right: a UI-free probe region should be map/ground.
+      - [1010, 45, 60, 200, 70, 210, 60, 200]
+  world_map_regional:
+    description: regional zoom, semi-transparent minimap top-right, no actors
+    fingerprint:
+      # Minimap present: probe region is a distinct minimap surface.
+      - [1010, 45, 140, 255, 140, 255, 140, 255]
+
+# Screens with stable anchor fingerprints (captured live, refined over time).
+screens:
+  glory_league_event:
+    description: 'Pompeii Glory League event splash with GO button'
+    fingerprint:
+      - [575, 654, 60, 200, 90, 200, 30, 120]  # GO button (saturated)
+      - [517, 100, 30, 200, 40, 200, 40, 200]  # event panel area
+  afk_popup:
+    description: '"Auto collect AFK resources" popup with single orange OK button'
+    fingerprint:
+      - [741, 676, 190, 255, 130, 200, 30, 110]  # orange OK button
+      - [550, 820, 0, 60, 0, 60, 0, 60]  # dim panel bottom
+  login_failed_dialog:
+    description: '"Login failed: session expired!" modal with OK / Device Log In / More'
+    fingerprint:
+      - [517, 671, 220, 255, 220, 255, 220, 255]  # bright title text
+      - [550, 820, 0, 60, 0, 60, 0, 60]  # dim dialog panel bottom
+  world_map:
+    description: world map, zoomed in (no minimap)
+    fingerprint:
+      - [48, 44, 40, 120, 80, 140, 110, 170]   # player_avatar blue-ish
+      - [485, 21, 90, 150, 95, 155, 105, 165]  # alliance_flags
+  world_map_regional:
+    description: regional map, minimap top-right
+    fingerprint:
+      - [48, 44, 40, 120, 80, 140, 110, 170]   # player_avatar blue-ish
+      - [1010, 45, 140, 255, 140, 255, 140, 255]  # minimap present
+
+# Navigation: reachable screens from each screen + recommended action.
+navigation:
+  afk_popup:
+    world_map:          {action: click, location: afk_ok}
+  login_failed_dialog:
+    world_map:          {action: click, location: login_failed_ok}
+  world_map:
+    world_map_regional: {action: zoom_out}
+    shelter:            {action: click, location: shelter}
+    chat:               {action: click, location: chat}
+    hero_menu:          {action: click, location: hero_menu}
+    bag_menu:           {action: click, location: bag_menu}
+    alliance_menu:      {action: click, location: alliance_menu}
+    campaign_menu:      {action: click, location: campaign_menu}
+    radar_station:      {action: click, location: radar_station}
+  world_map_regional:
+    world_map:          {action: zoom_in}
+    shelter:            {action: click, location: shelter}
+    chat:               {action: click, location: chat}
+    vip_menu:           {action: click, location: vip_menu}
+    region_overview:    {action: click, location: region_overview}
+    messages:           {action: click, location: messages}

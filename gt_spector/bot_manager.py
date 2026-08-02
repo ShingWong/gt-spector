@@ -219,12 +219,50 @@ class BotManager:
         bot.pid = proc.pid
         time.sleep(3)
 
+    def _find_game_pids_by_display(self, display: int) -> list[int]:
+        """All Doomsday.exe pids on a display (excludes start.exe wrappers)."""
+        disp = f":{display}".encode()
+        pids: list[int] = []
+        for pid_str in os.listdir("/proc/"):
+            if not pid_str.isdigit():
+                continue
+            try:
+                with open(f"/proc/{pid_str}/cmdline", "rb") as f:
+                    cmdline = f.read()
+                if b"Doomsday.exe" not in cmdline or b"start.exe" in cmdline:
+                    continue
+                with open(f"/proc/{pid_str}/environ", "rb") as f:
+                    env = f.read()
+                if b"DISPLAY=" + disp + b"\x00" in env:
+                    pids.append(int(pid_str))
+            except (FileNotFoundError, PermissionError, ProcessLookupError):
+                continue
+        return pids
+
     def stop_game(self, bot: Bot) -> None:
+        """Kill every Doomsday.exe on the bot's display.
+
+        The tracked `bot.pid` is a start.exe wrapper whose process group may
+        not cover the real Doomsday.exe (it reparents to init). Killing only
+        that group can leave a stale game running on the same display, which
+        then competes for focus/rendering. So we kill all matching pids.
+        """
         if bot.pid and self._pid_alive(bot.pid):
             os.killpg(os.getpgid(bot.pid), signal.SIGTERM)
-            time.sleep(2)
-            if self._pid_alive(bot.pid):
-                os.killpg(os.getpgid(bot.pid), signal.SIGKILL)
+            time.sleep(1)
+        for pid in self._find_game_pids_by_display(bot.display):
+            try:
+                os.killpg(os.getpgid(pid), signal.SIGTERM)
+            except (OSError, ProcessLookupError):
+                pass
+        time.sleep(2)
+        for pid in self._find_game_pids_by_display(bot.display):
+            try:
+                os.killpg(os.getpgid(pid), signal.SIGKILL)
+            except (OSError, ProcessLookupError):
+                pass
+        if bot.pid and self._pid_alive(bot.pid):
+            os.killpg(os.getpgid(bot.pid), signal.SIGKILL)
         bot.pid = None
         bot.state = BotState.OFFLINE
 
