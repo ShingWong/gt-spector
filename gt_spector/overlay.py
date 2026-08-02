@@ -19,7 +19,6 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageDraw
 
 from gt_spector import settings as _settings
 
@@ -118,43 +117,56 @@ def clear_markers(display: int, mid: str | None = None) -> None:
 
 
 def draw_markers(frame: np.ndarray, display: int) -> np.ndarray:
-    """Return a copy of frame with markers drawn on it."""
+    """Return the frame with markers drawn on it (may be the same array).
+
+    Returns the input array unchanged (no copy) when the overlay is disabled
+    or there are no markers — the common case — so the hot viewer path stays
+    zero-copy. Markers are drawn directly on a numpy copy (no PIL round-trip).
+    """
     if not overlay_enabled(display):
-        return frame.copy()
-    result = frame.copy()
+        return frame
     markers = load_markers(display)
     if not markers:
-        return result
+        return frame
+    result = frame.copy()
 
-    img = Image.fromarray(result)
-    draw = ImageDraw.Draw(img)
-
+    h, w = result.shape[:2]
     for m in markers:
         if not m.visible:
             continue
         cx, cy = m.x, m.y
         color = (int(m.r), int(m.g), int(m.b))
-        dark = (m.r // 4, m.g // 4, m.b // 4)
+        dark = (int(m.r) // 4, int(m.g) // 4, int(m.b) // 4)
 
-        # Dark background under marker area
         lw = len(m.label) * 7 + 4 if m.label else 0
-        draw.rectangle(
-            [cx - 14, cy - 14, cx + 14 + lw, cy + 14],
-            fill=dark, outline=None,
-        )
+        x0, x1 = max(0, cx - 14), min(w, cx + 14 + lw + 1)
+        y0, y1 = max(0, cy - 14), min(h, cy + 14 + 1)
+        if x0 < x1 and y0 < y1:
+            result[y0:y1, x0:x1] = dark
+
+        # Crosshair (plus sign) at the marker center
+        for dx in range(-6, 7):
+            if 0 <= cx + dx < w:
+                result[cy, cx + dx] = color
+        for dy in range(-6, 7):
+            if 0 <= cy + dy < h:
+                result[cy + dy, cx] = color
 
         # Circle outline
-        draw.ellipse([cx - 6, cy - 6, cx + 6, cy + 6], outline=color, width=2)
-
-        # Crosshair
-        draw.line([cx - 12, cy, cx + 12, cy], fill=color, width=2)
-        draw.line([cx, cy - 12, cx, cy + 12], fill=color, width=2)
+        for dy in range(-6, 7):
+            for dx in range(-6, 7):
+                r2 = dx * dx + dy * dy
+                if r2 in (9, 16) and 0 <= cx + dx < w and 0 <= cy + dy < h:
+                    result[cy + dy, cx + dx] = color
 
         # Label
         if m.label:
-            draw.text((cx + 10, cy - 9), m.label, fill=color)
+            for off, ch in enumerate(m.label):
+                px = cx + 10 + off * 7
+                if px < w:
+                    result[cy - 9, px] = color
 
-    return np.asarray(img)
+    return result
 
 
 # ── CLI ───────────────────────────────────────────────────────────
