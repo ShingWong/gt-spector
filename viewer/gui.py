@@ -27,6 +27,7 @@ class ViewerWindow:
         self._handling_release = False
         self._marker_pick_mode = False
         self._skip_release = False
+        self._last_redraw = 0.0
         self._tk.geometry("1152x914")
         self._scale = 1.0
         self._frame_counter = 0
@@ -212,7 +213,11 @@ class ViewerWindow:
             shm_changed = self._session.refresh()
             frame = self._session.frame
             h, w = frame.shape[:2]
-            if shm_changed:
+            now = _time.monotonic()
+            # Throttle redraws so the Tk mainloop stays responsive for input
+            # even when the game renders fast. ~15 fps is plenty for viewing.
+            if shm_changed and (now - self._last_redraw) >= 0.066:
+                self._last_redraw = now
                 frame = overlay.draw_markers(frame, self._display_num())
                 self._tk.update_idletasks()
                 fw = max(self._frame.winfo_width(), 50)
