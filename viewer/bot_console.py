@@ -1,7 +1,6 @@
 import json
 import os
 import re
-import shutil
 import subprocess
 import time
 import tkinter as tk
@@ -612,31 +611,35 @@ class BotConsole:
                 self._status.config(text=f"Error on {bot.name}: {e}")
         self._update_rows()
 
+    @staticmethod
+    def _reg_for_account(email: str) -> str | None:
+        """Map an account email to its session .reg file, or None."""
+        local = email.split("@")[0].strip().lower()
+        candidates = [
+            f"/tmp/igg_sessions/{local}/igg_session.reg",
+            f"/home/swong/dls/reg-sessions/{local}.reg",
+            f"/tmp/igg_{local.replace('sr0', 'sr0')}_full.reg",
+            f"/tmp/igg_{local}_full.reg",
+        ]
+        for p in candidates:
+            if os.path.exists(p):
+                return p
+        return None
+
     def _on_provision(self) -> None:
         self._status.config(text="Provisioning bots from accounts file...")
-        self._tk.update()
-        base = "/home/swong/dls/wineprefix_bots"
-        for entry in os.listdir(base):
-            shutil.rmtree(os.path.join(base, entry), ignore_errors=True)
-        self._manager.bots.clear()
-        self._build_rows()
         self._tk.update()
 
         for name, email in self._accounts.items():
             self._status.config(text=f"Building {name} ({email})...")
             self._tk.update()
-            account_num = int(name.replace("bot", ""))
-            if account_num == 1:
-                reg = "/tmp/igg_sr04_full.reg"
-            elif account_num == 2:
-                reg = "/tmp/igg_sr05_full.reg"
-            else:
-                reg = None
+            reg = self._reg_for_account(email)
             r = subprocess.run(
                 ["python3", "-m", "gt_spector.provision", "init", name,
-                 "--account", email] + (["--reg", reg] if reg and os.path.exists(reg) else []),
-                capture_output=True, text=True, timeout=120, check=False)
-            self._status.config(text=f"{name}: {r.stdout.strip()[-60:]}")
+                 "--account", email] + (["--reg", reg] if reg else []),
+                capture_output=True, text=True, timeout=300, check=False)
+            tail = (r.stdout or r.stderr or "").strip()[-60:]
+            self._status.config(text=f"{name}: {tail}")
             self._tk.update()
         self._status.config(text="Provisioning complete")
         self._refresh_bots()
