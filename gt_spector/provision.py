@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 """CLI tool to create and manage isolated game prefixes for bot instances.
 
+Each prefix is a clean game install (game + DXVK + browser DLL + fonts +
+resolution). Accounts log in directly through the game's embedded browser
+— no registry/appdata/VITAL copying is needed; the game writes its own
+session after login.
+
 Usage:
-  provision.py init <name> --account <email>   Create prefix with game + session
-  provision.py destroy <name>                   Remove a prefix
-  provision.py list                              List all prefixes
-  provision.py update                            Update game files from base
+  provision.py init <name> [--account <email>]   Create a fresh prefix
+  provision.py destroy <name>                     Remove a prefix
+  provision.py list                               List all prefixes
+  provision.py update                             Update game files from base
 """
 import argparse
 import os
@@ -15,11 +20,9 @@ import tempfile
 import time
 
 BASE_DIR = "/home/swong/dls/wineprefix_bots"
-LOGIN_DIR = "/home/swong/dls/wineprefix_login"
 GAME_BASE = "/home/swong/dls/game-base/Doomsday_1.59.0"
 WINE_BIN = "/opt/wine-proton/bin/wine"
 WINEBOOT = "/opt/wine-proton/bin/wineboot"
-SESSION_TEMPLATE = "/home/swong/dls/tmp/sr02-05/full.reg"
 PROTON_SRC = "/home/swong/dls/wineprefix_proton"
 DXVK_SRC = "/home/swong/dls/dxvk/dxvk-source-2.5.3/build-win64/src"
 
@@ -29,28 +32,21 @@ def main():
 
     init = sub.add_parser("init", help="Create a new prefix")
     init.add_argument("name", help="Prefix name (e.g. bot01)")
-    init.add_argument("--account", required=True, help="Account email")
-    init.add_argument("--reg", help="Path to .reg session file (optional)")
-    init.add_argument("--appdata", help="Path to session appdata: a .7z archive "
-                                        "containing the IGG/ tree, or a directory/prefix "
-                                        "with AppData/LocalLow/IGG (optional)")
+    init.add_argument("--account", help="Account email (informational only)")
 
     sub.add_parser("destroy", help="Remove a prefix").add_argument("name")
     sub.add_parser("list", help="List all prefixes")
     sub.add_parser("update", help="Update game files from game-base")
-    sub.add_parser("login", help="Provision the dedicated login prefix (wineprefix_login)")
 
     args = parser.parse_args()
     if args.cmd == "init":
-        cmd_init(args.name, args.account, args.reg, args.appdata)
+        cmd_init(args.name, args.account)
     elif args.cmd == "destroy":
         cmd_destroy(args.name)
     elif args.cmd == "list":
         cmd_list()
     elif args.cmd == "update":
         cmd_update()
-    elif args.cmd == "login":
-        cmd_login()
 
 def _prefix_path(name: str) -> str:
     return os.path.join(BASE_DIR, name)
@@ -103,69 +99,9 @@ def _force_resolution(dest: str) -> None:
     print("Applied game settings (1152x864, low quality)")
 
 
-def _install_appdata(dest: str, appdata: str) -> None:
-    """Install session appdata (IGG/ tree incl. VITAL + ab/ cache) into a prefix.
-
-    Source may be a .7z archive whose root is the IGG/ directory, or a
-    directory/prefix that contains AppData/LocalLow/IGG.
-    """
-    local_low = os.path.join(dest, "drive_c", "users", "steamuser", "AppData", "LocalLow")
-    igg_dst = os.path.join(local_low, "IGG")
-    tmp_extract = os.path.join(dest, "drive_c", "_appdata_extract")
-
-    try:
-        if appdata.endswith((".7z", ".zip")):
-            os.makedirs(tmp_extract, exist_ok=True)
-            subprocess.run(["7z", "x", "-y", f"-o{tmp_extract}", appdata],
-                           capture_output=True, check=False)
-            # Archive root is IGG/, or a path ending in .../IGG
-            src_igg = None
-            for root, dirs, _files in os.walk(tmp_extract):
-                if os.path.basename(root) == "IGG" and "Doomsday Last Survivors" in os.listdir(root):
-                    src_igg = root
-                    break
-            if src_igg is None:
-                # Some archives contain a wrapper dir; find any IGG with the game dir
-                for root, dirs, _files in os.walk(tmp_extract):
-                    if os.path.basename(root) == "IGG" and "Doomsday_ Last Survivors" in os.listdir(root):
-                        src_igg = root
-                        break
-            if src_igg is None:
-                print("WARNING: no IGG/ dir found in appdata archive")
-                return
-            os.makedirs(local_low, exist_ok=True)
-            shutil.copytree(src_igg, igg_dst, symlinks=True, dirs_exist_ok=True)
-        else:
-            # A source prefix or dir containing AppData/LocalLow/IGG
-            src = appdata
-            cand = os.path.join(appdata, "drive_c", "users", "steamuser", "AppData", "LocalLow", "IGG")
-            if os.path.isdir(cand):
-                src = cand
-            elif not os.path.isdir(os.path.join(appdata, "Doomsday Last Survivors")):
-                print(f"WARNING: no IGG appdata found at {appdata}")
-                return
-            os.makedirs(local_low, exist_ok=True)
-            shutil.copytree(src, igg_dst, symlinks=True, dirs_exist_ok=True)
-        print("Appdata installed (VITAL + IGG + ab/ cache)")
-    except OSError as e:
-        print(f"WARNING: appdata install failed: {e}")
-    finally:
-        if os.path.isdir(tmp_extract):
-            shutil.rmtree(tmp_extract, ignore_errors=True)
-
-
-def cmd_init(name: str, account: str, reg_path: str | None, appdata: str | None = None):
+def cmd_init(name: str, account: str | None = None):
     dest = _prefix_path(name)
-    already = os.path.exists(os.path.join(dest, "drive_c"))
-    if already and reg_path:
-        # Re-apply session
-        subprocess.run([WINE_BIN, "reg", "delete", "HKCU\\Software\\IGG", "/f"],
-                       env={"WINEPREFIX": dest}, capture_output=True, check=False)
-        subprocess.run([WINE_BIN, "reg", "import", reg_path],
-                       env={"WINEPREFIX": dest}, capture_output=True, check=False)
-        print(f"Session applied to {name}")
-        return
-    elif already:
+    if os.path.exists(os.path.join(dest, "drive_c")):
         print(f"Prefix {name} already exists")
         return
 
@@ -198,71 +134,16 @@ def cmd_init(name: str, account: str, reg_path: str | None, appdata: str | None 
                     "/v", "dxgi", "/t", "REG_SZ", "/d", "native", "/f"],
                    env={"WINEPREFIX": dest}, capture_output=True, check=False)
 
-    if reg_path and os.path.exists(reg_path):
-        subprocess.run([WINE_BIN, "reg", "import", reg_path],
-                       env={"WINEPREFIX": dest}, capture_output=True, check=False)
-        print(f"Session applied from {reg_path}")
-    else:
-        print("No session reg provided — game will start as guest")
-
     _force_resolution(dest)
+    _install_fonts(dest)
 
-    if appdata:
-        _install_appdata(dest, appdata)
-
-    print(f"✓ Prefix {name} ready")
+    print(f"✓ Prefix {name} ready (login via the in-game browser)")
     return {
         "name": name,
         "account": account,
         "prefix": dest,
         "display": _display_num(name),
     }
-
-
-def cmd_login():
-    """Provision the dedicated login prefix (wineprefix_login).
-
-    This slot is used only for interactive login: run the game, log into an
-    account via the embedded browser, then harvest the fresh registry + VITAL
-    files with the harvest script. No account session is installed here.
-    """
-    dest = LOGIN_DIR
-    if os.path.exists(os.path.join(dest, "drive_c")):
-        print(f"Login prefix already exists at {dest}")
-        return
-
-    os.makedirs(dest, exist_ok=True)
-    print("Creating login prefix...")
-
-    subprocess.run([WINEBOOT, "-u"], env={"WINEPREFIX": dest},
-                   capture_output=True, timeout=120, check=False)
-    time.sleep(3)
-
-    game_dir = os.path.join(dest, "drive_c", "Program Files", "DoomsdayLastSurvivors")
-    os.makedirs(game_dir, exist_ok=True)
-    ver_dir = os.path.join(game_dir, "Doomsday_1.59.0")
-
-    print("Copying game files...")
-    shutil.copytree(GAME_BASE, ver_dir, symlinks=True, dirs_exist_ok=True)
-
-    dst_x86 = os.path.join(dest, "drive_c", "windows", "system32")
-    for dll in (os.path.join(DXVK_SRC, "d3d11", "d3d11.dll"),
-                os.path.join(DXVK_SRC, "dxgi", "dxgi.dll")):
-        if not os.path.exists(dll):
-            print(f"WARNING: {dll} not found (DXVK not built?)")
-            continue
-        shutil.copy2(dll, os.path.join(dst_x86, os.path.basename(dll)))
-
-    subprocess.run([WINE_BIN, "reg", "add", "HKCU\\Software\\Wine\\DllOverrides",
-                    "/v", "d3d11", "/t", "REG_SZ", "/d", "native", "/f"],
-                   env={"WINEPREFIX": dest}, capture_output=True, check=False)
-    subprocess.run([WINE_BIN, "reg", "add", "HKCU\\Software\\Wine\\DllOverrides",
-                    "/v", "dxgi", "/t", "REG_SZ", "/d", "native", "/f"],
-                   env={"WINEPREFIX": dest}, capture_output=True, check=False)
-
-    _force_resolution(dest)
-    _install_fonts(dest)
-    print(f"✓ Login prefix ready at {dest}")
 
 
 def _install_fonts(dest: str) -> None:
