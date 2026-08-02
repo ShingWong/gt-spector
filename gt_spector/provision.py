@@ -266,7 +266,14 @@ def cmd_login():
 
 
 def _install_fonts(dest: str) -> None:
-    """Copy host fonts into the prefix so the embedded browser renders text."""
+    """Install fonts so the embedded browser renders text.
+
+    The browser's login form needs real Windows fonts (Arial/Segoe UI/Tahoma/
+    Verdana); metric-compatible substitutes (DejaVu/Liberation) resolve via
+    fontconfig but Chromium's placeholder/label text still fails without the
+    real files. Copy host fonts plus the Windows core fonts from the VM and
+    register them in the prefix registry.
+    """
     fonts_dir = os.path.join(dest, "drive_c", "windows", "Fonts")
     os.makedirs(fonts_dir, exist_ok=True)
     for f in ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -277,6 +284,44 @@ def _install_fonts(dest: str) -> None:
               "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf"):
         if os.path.exists(f):
             shutil.copy2(f, os.path.join(fonts_dir, os.path.basename(f)))
+
+    # Windows core fonts from the login VM (Arial, Segoe UI, Tahoma, Verdana,
+    # Calibri). Fall back to host copies if the VM is unreachable.
+    vm_fonts = {
+        "arial.ttf": "Arial", "arialbd.ttf": "Arial Bold",
+        "ariali.ttf": "Arial Italic", "arialbi.ttf": "Arial Bold Italic",
+        "segoeui.ttf": "Segoe UI", "segoeuib.ttf": "Segoe UI Bold",
+        "segoeuii.ttf": "Segoe UI Italic",
+        "tahoma.ttf": "Tahoma", "tahomabd.ttf": "Tahoma Bold",
+        "verdana.ttf": "Verdana", "verdanab.ttf": "Verdana Bold",
+        "calibri.ttf": "Calibri", "calibrib.ttf": "Calibri Bold",
+    }
+    for fname, fname_reg in vm_fonts.items():
+        dst = os.path.join(fonts_dir, fname)
+        if os.path.exists(dst):
+            continue
+        got = False
+        for src in (f"/usr/share/fonts/truetype/{fname}",
+                    f"/usr/share/fonts/truetype/msttcorefonts/{fname}"):
+            if os.path.exists(src):
+                shutil.copy2(src, dst)
+                got = True
+                break
+        if not got:
+            try:
+                import subprocess
+                subprocess.run(
+                    ["scp", "-q", f"techno@10.8.2.11:C:/Windows/Fonts/{fname}", dst],
+                    capture_output=True, timeout=30, check=False)
+                got = os.path.exists(dst) and os.path.getsize(dst) > 1000
+            except (OSError, subprocess.SubprocessError):
+                got = False
+        if got:
+            subprocess.run(
+                [WINE_BIN, "reg", "add",
+                 "HKLM\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts",
+                 "/v", fname_reg, "/t", "REG_SZ", "/d", fname, "/f"],
+                env={"WINEPREFIX": dest}, capture_output=True, check=False)
     print(f"Installed fonts into {fonts_dir}")
 
 def cmd_destroy(name: str):
