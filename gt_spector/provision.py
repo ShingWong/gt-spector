@@ -29,6 +29,9 @@ def main():
     init.add_argument("name", help="Prefix name (e.g. bot01)")
     init.add_argument("--account", required=True, help="Account email")
     init.add_argument("--reg", help="Path to .reg session file (optional)")
+    init.add_argument("--appdata", help="Path to session appdata: a .7z archive "
+                                        "containing the IGG/ tree, or a directory/prefix "
+                                        "with AppData/LocalLow/IGG (optional)")
 
     sub.add_parser("destroy", help="Remove a prefix").add_argument("name")
     sub.add_parser("list", help="List all prefixes")
@@ -36,7 +39,7 @@ def main():
 
     args = parser.parse_args()
     if args.cmd == "init":
-        cmd_init(args.name, args.account, args.reg)
+        cmd_init(args.name, args.account, args.reg, args.appdata)
     elif args.cmd == "destroy":
         cmd_destroy(args.name)
     elif args.cmd == "list":
@@ -53,7 +56,58 @@ def _display_num(name: str) -> int:
     except ValueError:
         return hash(name) % 1000 + 100
 
-def cmd_init(name: str, account: str, reg_path: str | None):
+def _install_appdata(dest: str, appdata: str) -> None:
+    """Install session appdata (IGG/ tree incl. VITAL + ab/ cache) into a prefix.
+
+    Source may be a .7z archive whose root is the IGG/ directory, or a
+    directory/prefix that contains AppData/LocalLow/IGG.
+    """
+    local_low = os.path.join(dest, "drive_c", "users", "steamuser", "AppData", "LocalLow")
+    igg_dst = os.path.join(local_low, "IGG")
+    tmp_extract = os.path.join(dest, "drive_c", "_appdata_extract")
+
+    try:
+        if appdata.endswith((".7z", ".zip")):
+            os.makedirs(tmp_extract, exist_ok=True)
+            subprocess.run(["7z", "x", "-y", f"-o{tmp_extract}", appdata],
+                           capture_output=True, check=False)
+            # Archive root is IGG/, or a path ending in .../IGG
+            src_igg = None
+            for root, dirs, _files in os.walk(tmp_extract):
+                if os.path.basename(root) == "IGG" and "Doomsday Last Survivors" in os.listdir(root):
+                    src_igg = root
+                    break
+            if src_igg is None:
+                # Some archives contain a wrapper dir; find any IGG with the game dir
+                for root, dirs, _files in os.walk(tmp_extract):
+                    if os.path.basename(root) == "IGG" and "Doomsday_ Last Survivors" in os.listdir(root):
+                        src_igg = root
+                        break
+            if src_igg is None:
+                print("WARNING: no IGG/ dir found in appdata archive")
+                return
+            os.makedirs(local_low, exist_ok=True)
+            shutil.copytree(src_igg, igg_dst, symlinks=True, dirs_exist_ok=True)
+        else:
+            # A source prefix or dir containing AppData/LocalLow/IGG
+            src = appdata
+            cand = os.path.join(appdata, "drive_c", "users", "steamuser", "AppData", "LocalLow", "IGG")
+            if os.path.isdir(cand):
+                src = cand
+            elif not os.path.isdir(os.path.join(appdata, "Doomsday Last Survivors")):
+                print(f"WARNING: no IGG appdata found at {appdata}")
+                return
+            os.makedirs(local_low, exist_ok=True)
+            shutil.copytree(src, igg_dst, symlinks=True, dirs_exist_ok=True)
+        print("Appdata installed (VITAL + IGG + ab/ cache)")
+    except OSError as e:
+        print(f"WARNING: appdata install failed: {e}")
+    finally:
+        if os.path.isdir(tmp_extract):
+            shutil.rmtree(tmp_extract, ignore_errors=True)
+
+
+def cmd_init(name: str, account: str, reg_path: str | None, appdata: str | None = None):
     dest = _prefix_path(name)
     already = os.path.exists(os.path.join(dest, "drive_c"))
     if already and reg_path:
@@ -103,6 +157,9 @@ def cmd_init(name: str, account: str, reg_path: str | None):
         print(f"Session applied from {reg_path}")
     else:
         print("No session reg provided — game will start as guest")
+
+    if appdata:
+        _install_appdata(dest, appdata)
 
     print(f"✓ Prefix {name} ready")
     return {

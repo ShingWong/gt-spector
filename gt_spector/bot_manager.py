@@ -194,6 +194,14 @@ class BotManager:
                "WINEPREFIX": bot.prefix,
                "GT_SPECTOR_ENABLE_READBACK": "1",
                "GT_SPECTOR_SHM_ID": str(bot.shm_id),
+               # Required for the patched DXVK offscreen swapchain (see
+               # README "Required env vars" + src/dxvk-patch). Missing these
+               # leaves the GPU idle / falls back to software rendering.
+               "DXVK_OFFSCREEN": "1",
+               "DXVK_ASYNC": "1",
+               "DXVK_WSI_DRIVER": "None",
+               "MESA_GLSL_CACHE_DISABLE": "true",
+               "vblank_mode": "0",
         }
         proc = subprocess.Popen(
             [WINE_BIN, "Doomsday.exe",

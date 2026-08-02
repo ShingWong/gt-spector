@@ -625,6 +625,19 @@ class BotConsole:
                 return p
         return None
 
+    @staticmethod
+    def _appdata_for_account(email: str) -> str | None:
+        """Map an account email to its session appdata archive/prefix, or None."""
+        local = email.split("@")[0].strip().lower()
+        archives = [
+            f"/home/swong/dls/IGG_{local}.7z",
+            f"/home/swong/dls/tmp/IGG_{local}.7z",
+        ]
+        for p in archives:
+            if os.path.exists(p):
+                return p
+        return None
+
     def _on_provision(self) -> None:
         self._status.config(text="Provisioning bots from accounts file...")
         self._tk.update()
@@ -633,10 +646,15 @@ class BotConsole:
             self._status.config(text=f"Building {name} ({email})...")
             self._tk.update()
             reg = self._reg_for_account(email)
+            appdata = self._appdata_for_account(email)
+            cmd = ["python3", "-m", "gt_spector.provision", "init", name,
+                   "--account", email]
+            if reg:
+                cmd += ["--reg", reg]
+            if appdata:
+                cmd += ["--appdata", appdata]
             r = subprocess.run(
-                ["python3", "-m", "gt_spector.provision", "init", name,
-                 "--account", email] + (["--reg", reg] if reg else []),
-                capture_output=True, text=True, timeout=300, check=False)
+                cmd, capture_output=True, text=True, timeout=300, check=False)
             tail = (r.stdout or r.stderr or "").strip()[-60:]
             self._status.config(text=f"{name}: {tail}")
             self._tk.update()
