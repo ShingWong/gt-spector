@@ -11,6 +11,7 @@ import argparse
 import os
 import shutil
 import subprocess
+import tempfile
 import time
 
 BASE_DIR = "/home/swong/dls/wineprefix_bots"
@@ -55,6 +56,48 @@ def _display_num(name: str) -> int:
         return int(name.replace("bot", ""))
     except ValueError:
         return hash(name) % 1000 + 100
+
+_GAME_SETTINGS_REG = r"""Windows Registry Editor Version 5.00
+
+[HKEY_CURRENT_USER\Software\IGG\Doomsday: Last Survivors]
+"Screenmanager Resolution Width Default_h680557497"=dword:00000500
+"Screenmanager Resolution Height Default_h1380706816"=dword:000002d0
+"Screenmanager Resolution Use Native Default_h1405981789"=dword:00000001
+"Screenmanager Fullscreen mode Default_h401710285"=dword:00000003
+"Screenmanager Resolution Width_h182942802"=dword:00000480
+"Screenmanager Resolution Window Width_h2524650974"=dword:00000480
+"Screenmanager Resolution Height_h2627697771"=dword:00000360
+"Screenmanager Resolution Window Height_h1684712807"=dword:00000360
+"Screenmanager Resolution Use Native_h1405027254"=dword:00000000
+"Screenmanager Fullscreen mode_h3630240806"=dword:00000003
+"UnityGraphicsQuality_h1669003810"=dword:00000000
+"PCResolution_h240614520"=hex:31,31,35,32,7c,38,36,34,7c,30,00
+"""
+
+
+def _force_resolution(dest: str) -> None:
+    """Force the game to 1152x864, low graphics, windowed — the settings
+    from the working Windows 10 VM.
+
+    Unity saves its resolution in the registry and overrides the
+    -screen-height launch arg. If a copied session registry has a different
+    height (e.g. 720), the frame is shorter than 864 and every coordinate
+    below y=720 is off-frame — clicks don't register. This imports the
+    exact values from the Windows VM (resolution 1152x864, quality low).
+    """
+    reg_path = os.path.join(tempfile.gettempdir(), f"gt_game_settings_{os.getpid()}.reg")
+    with open(reg_path, "w") as f:
+        f.write(_GAME_SETTINGS_REG)
+    try:
+        subprocess.run([WINE_BIN, "reg", "import", reg_path],
+                       env={"WINEPREFIX": dest}, capture_output=True, check=False)
+    finally:
+        try:
+            os.remove(reg_path)
+        except OSError:
+            pass
+    print("Applied game settings (1152x864, low quality)")
+
 
 def _install_appdata(dest: str, appdata: str) -> None:
     """Install session appdata (IGG/ tree incl. VITAL + ab/ cache) into a prefix.
@@ -157,6 +200,8 @@ def cmd_init(name: str, account: str, reg_path: str | None, appdata: str | None 
         print(f"Session applied from {reg_path}")
     else:
         print("No session reg provided — game will start as guest")
+
+    _force_resolution(dest)
 
     if appdata:
         _install_appdata(dest, appdata)
