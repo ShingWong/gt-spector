@@ -299,7 +299,7 @@ navigation:
     world_map:          {action: locate, name: back_static}
     help_dialog:        {action: locate, name: help_title_static}
   help_dialog:
-    alliance_menu:      {action: locate, name: exit_static}
+    alliance_menu:      {action: locate, name: help_dialog_exit_static}
   exit_dialog:
     shelter:            {action: click, location: exit_cancel}
     world_map:          {action: click, location: exit_cancel}
