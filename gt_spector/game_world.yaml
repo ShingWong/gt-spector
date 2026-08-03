@@ -36,7 +36,10 @@
 # - messages_count: badge on the messages button. Not needed yet.
 #
 # Map alliance help (2026-08-02):
-# - map_alliance_help: an alliance help button on the world map.
+# - map_alliance_help: an alliance help button on the world map. Can be
+#   MISSING when no help is requested; if present, an alliance member has
+#   requested help. Same mechanic as "help" inside the alliance menu (to be
+#   mapped later). This is the button the Help bot targets.
 
 version: 1
 
