@@ -12,9 +12,7 @@ from gt_spector import templates as T
 from gt_spector.game_world import GameWorld
 
 
-def main() -> None:
-    display = int(sys.argv[1])
-    screen = sys.argv[2] if len(sys.argv) > 2 else None
+def main_args(display: int, screen: str | None) -> None:
     gw = GameWorld()
     if screen is None:
         screen = next(iter(gw.screens))  # pragma: no cover
@@ -34,6 +32,12 @@ def main() -> None:
         labeled += 1
         print(f"  {t.name} @ ({t.x},{t.y}) {t.w}x{t.h}")
     print(f"labeled {labeled} fixed templates for {screen}")
+
+
+def main() -> None:
+    display = int(sys.argv[1])
+    screen = sys.argv[2] if len(sys.argv) > 2 else None
+    main_args(display, screen)
 
 
 if __name__ == "__main__":
