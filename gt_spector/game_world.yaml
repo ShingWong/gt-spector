@@ -25,7 +25,7 @@ locations:
   radar_station:     {x: 103, y: 616, screens: [world_map], drifts: true}
   alliance_menu:     {x: 960, y: 800, screens: [world_map], drifts: true}
   hero_menu:         {x: 1040, y: 800, screens: [world_map], drifts: true}
-  bag_menu:          {x: 975, y: 800, screens: [world_map], drifts: true}
+  bag:               {x: 861, y: 782, screens: [world_map], drifts: true}
   campaign_menu:     {x: 800, y: 800, screens: [world_map], drifts: true}
 
 # World zones on the regional map: zone_1 outer, zone_2 middle, zone_3 center.
@@ -87,7 +87,7 @@ navigation:
     shelter:            {action: click, location: shelter}
     chat:               {action: click, location: chat}
     hero_menu:          {action: locate, name: hero_menu}
-    bag_menu:           {action: locate, name: bag_menu}
+    bag:                {action: locate, name: bag}
     alliance_menu:      {action: locate, name: alliance_menu}
     campaign_menu:      {action: locate, name: campaign_menu}
     radar_station:      {action: locate, name: radar_station}

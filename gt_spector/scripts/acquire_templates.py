@@ -33,7 +33,7 @@ CLICK_POINTS = {
     "radar_station": (103, 616),
     "alliance_menu": (968, 796),
     "hero_menu": (1038, 796),
-    "bag_menu": (999, 798),
+    "bag": (861, 782),
     "campaign_menu": (800, 800),
 }
 
