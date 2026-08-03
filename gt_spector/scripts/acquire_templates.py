@@ -80,6 +80,7 @@ EXTRA_TEMPLATES = {
     "alliance_title_static": (157, 31),
     "help_title_static": (568, 144),
     "help_dialog_exit_static": (1006, 144),
+    "upgrade_ranged_barracks_title_static": (531, 187),
     "likes_static": (261, 790),
     "more_static": (361, 789),
     "stamina_value": (992, 275),

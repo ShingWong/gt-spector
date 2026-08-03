@@ -129,6 +129,7 @@ locations:
   back_static:       {x: 44,  y: 38,  screens: [avatar_menu, alliance_menu]}
   alliance_title_static: {x: 157, y: 31, screens: [alliance_menu]}
   help_title_static: {x: 568, y: 144, screens: [help_dialog]}
+  upgrade_ranged_barracks_title_static: {x: 531, y: 187, screens: [upgrade_ranged_barracks]}
   commander_static:  {x: 141, y: 40,  screens: [avatar_menu]}
   ranking_static:    {x: 61,  y: 786, screens: [avatar_menu]}
   settings_static:   {x: 159, y: 789, screens: [avatar_menu]}
@@ -213,6 +214,9 @@ screens:
     description: alliance help dialog (list of member help requests).
       Identified by the HELP title.
     templates: [help_title_static]
+  upgrade_ranged_barracks:
+    description: upgrade ranged barracks dialog. Exit by clicking the title.
+    templates: [upgrade_ranged_barracks_title_static]
   avatar_menu:
     description: avatar / commander info menu. Identified by back + commander_static.
     templates: [back_static, commander_static]
@@ -300,6 +304,8 @@ navigation:
     help_dialog:        {action: locate, name: help_title_static}
   help_dialog:
     alliance_menu:      {action: locate, name: help_dialog_exit_static}
+  upgrade_ranged_barracks:
+    shelter_view:       {action: locate, name: upgrade_ranged_barracks_title_static}
   exit_dialog:
     shelter:            {action: click, location: exit_cancel}
     world_map:          {action: click, location: exit_cancel}
