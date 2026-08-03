@@ -16,8 +16,17 @@
 # - stamina_value: the stamina count shown ON TOP of the green stamina bar.
 #   Background is the bar (green) or black depending on bar fill. The value
 #   is important for future bot decisions (e.g. when to refill).
+#   NOTE: the location is fixed, but the VALUE changes (the digits). It is
+#   only useful for EXTRACTING the value (reader), not for template matching.
 # - stamina_add: button that opens the stamina dialog where consumables can
 #   be exchanged for stamina.
+#
+# Fixed-location policy (2026-08-02):
+# For now ALL template locations are treated as fixed (exact stored (x,y),
+# no sliding search). Exceptions where the template must still search:
+# back_static (appears on avatar_menu AND alliance_menu at slightly different
+# positions). If a fixed match ever fails, convert that template back to
+# sliding search. stamina_value's content changes but its position is fixed.
 #
 # Navigation rule (2026-08-02):
 # ESC always takes you back one menu level. This is a reliable universal
@@ -129,7 +138,12 @@ locations:
   back_static:       {x: 44,  y: 38,  screens: [avatar_menu, alliance_menu]}
   alliance_title_static: {x: 157, y: 31, screens: [alliance_menu]}
   help_title_static: {x: 568, y: 144, screens: [help_dialog]}
+  help_dialog_exit_static: {x: 1006, y: 144, screens: [help_dialog]}
+  exit_static:       {x: 1005, y: 144, screens: [settings]}
+  account_exit_static: {x: 1007, y: 143, screens: [account]}
+  change_account_static: {x: 573, y: 660, screens: [account]}
   upgrade_ranged_barracks_title_static: {x: 531, y: 187, screens: [upgrade_ranged_barracks]}
+  upgrade_barracks_exit_static: {x: 951, y: 186, screens: [upgrade_ranged_barracks]}
   commander_static:  {x: 141, y: 40,  screens: [avatar_menu]}
   ranking_static:    {x: 61,  y: 786, screens: [avatar_menu]}
   settings_static:   {x: 159, y: 789, screens: [avatar_menu]}
@@ -305,7 +319,7 @@ navigation:
   help_dialog:
     alliance_menu:      {action: locate, name: help_dialog_exit_static}
   upgrade_ranged_barracks:
-    shelter_view:       {action: locate, name: upgrade_ranged_barracks_title_static}
+    shelter_view:       {action: locate, name: upgrade_barracks_exit_static}
   exit_dialog:
     shelter:            {action: click, location: exit_cancel}
     world_map:          {action: click, location: exit_cancel}

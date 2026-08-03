@@ -278,14 +278,14 @@
   {
     "name": "back_static",
     "shape": "rect",
-    "x": 30,
-    "y": 27,
+    "x": 26,
+    "y": 22,
     "w": 28,
     "h": 23,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
     "reader": "vlm",
-    "fixed": true
+    "fixed": false
   },
   {
     "name": "commander_static",
@@ -308,7 +308,8 @@
     "h": 29,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": true
   },
   {
     "name": "likes_static",
@@ -319,7 +320,8 @@
     "h": 31,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": true
   },
   {
     "name": "more_static",
@@ -330,7 +332,8 @@
     "h": 36,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": true
   },
   {
     "name": "stamina_value",
@@ -341,7 +344,8 @@
     "h": 29,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": true
   },
   {
     "name": "stamina_add",
@@ -352,7 +356,8 @@
     "h": 20,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": true
   },
   {
     "name": "exit_static",
@@ -387,7 +392,8 @@
     "h": 24,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": true
   },
   {
     "name": "system_settings_static",
