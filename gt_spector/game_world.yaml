@@ -29,6 +29,14 @@
 # VIP note (2026-08-02):
 # - vip_reward: shows if a VIP reward is available. Shifts ~30px right when
 #   the VIP level is >9.
+#
+# Messages note (2026-08-02):
+# - messages_static: the invariant part of the messages button, used to
+#   identify it.
+# - messages_count: badge on the messages button. Not needed yet.
+#
+# Map alliance help (2026-08-02):
+# - map_alliance_help: an alliance help button on the world map.
 
 version: 1
 
@@ -49,7 +57,7 @@ locations:
   chat:              {x: 139, y: 810, screens: [world_map, world_map_regional]}
   vip_menu:          {x: 113, y: 56,  screens: [world_map, world_map_regional]}
   region_overview:   {x: 1120, y: 800, screens: [world_map, world_map_regional]}
-  messages:          {x: 1120, y: 745, screens: [world_map, world_map_regional]}
+  messages:          {x: 1113, y: 751, screens: [world_map, world_map_regional]}
   region_search:     {x: 439, y: 15,  screens: [world_map, world_map_regional]}
   alliance_flags:    {x: 485, y: 21,  screens: [world_map, world_map_regional]}
   mission_menu:      {x: 34,  y: 698, screens: [world_map]}

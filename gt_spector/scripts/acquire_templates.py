@@ -29,7 +29,6 @@ CLICK_POINTS = {
     "avatar": (49, 39),
     "vip_menu": (113, 56),
     "region_overview": (1120, 800),
-    "messages": (1120, 745),
     "region_search": (439, 15),
     "alliance_flags": (485, 21),
     "radar_station": (103, 616),
@@ -46,6 +45,7 @@ CLICK_POINTS = {
 # indicates rewards available inside the alliance menu (future: claim).
 # vip_reward shows if a VIP reward is available; shifts ~30px right when VIP
 # level > 9.
+# VIP note (see game_world.yaml): vip_reward shifts ~30px right when VIP >9.
 EXTRA_TEMPLATES = {
     "mission_menu_static": (34, 698),
     "mission_menu_count": (55, 671),
@@ -54,6 +54,9 @@ EXTRA_TEMPLATES = {
     "alliance_menu_static": (951, 800),
     "alliance_menu_count": (980, 772),
     "vip_reward": (137, 49),
+    "messages_static": (1113, 751),
+    "messages_count": (1126, 727),
+    "map_alliance_help": (1114, 693),
 }
 
 PATCH_HALF = 24  # fallback 48x48 capture box when tight-boxing fails
