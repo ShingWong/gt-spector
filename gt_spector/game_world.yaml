@@ -49,6 +49,10 @@
 # red-background shape (which is constant) for presence detection, and use the
 # VLM reader to read the digit when the value is needed.
 #
+# Count badge digit limit (IMPORTANT, 2026-08-02):
+# When a count reaches 3 digits (>= 100), the badge shows "..." instead of
+# the number. Treat "..." as a valid "present with a large count" signal.
+#
 # Map alliance help (2026-08-02):# - map_alliance_help: an alliance help button on the world map. Can be
 #   MISSING when no help is requested; if present, an alliance member has
 #   requested help. Same mechanic as "help" inside the alliance menu (to be
