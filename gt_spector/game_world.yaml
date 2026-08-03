@@ -19,6 +19,16 @@
 # - chat_static: the invariant part of the chat button, used to identify it.
 # - chat_unread: a red-background @ badge that appears when there are unread
 #   messages. Not needed yet; in the future it can alert on unread chat.
+#
+# Alliance menu note (2026-08-02):
+# - alliance_menu_static: the invariant part of the alliance button, used to
+#   identify it.
+# - alliance_menu_count: indicates rewards available inside the alliance menu.
+#   Not needed yet; in the future it can be used to claim alliance rewards.
+#
+# VIP note (2026-08-02):
+# - vip_reward: shows if a VIP reward is available. Shifts ~30px right when
+#   the VIP level is >9.
 
 version: 1
 
@@ -44,7 +54,7 @@ locations:
   alliance_flags:    {x: 485, y: 21,  screens: [world_map, world_map_regional]}
   mission_menu:      {x: 34,  y: 698, screens: [world_map]}
   radar_station:     {x: 103, y: 616, screens: [world_map], drifts: true}
-  alliance_menu:     {x: 960, y: 800, screens: [world_map], drifts: true}
+  alliance_menu:     {x: 951, y: 800, screens: [world_map], drifts: true}
   hero_menu:         {x: 1040, y: 800, screens: [world_map], drifts: true}
   bag:               {x: 861, y: 782, screens: [world_map], drifts: true}
   campaign_menu:     {x: 800, y: 800, screens: [world_map], drifts: true}
@@ -115,7 +125,7 @@ navigation:
     chat:               {action: click, location: chat}
     hero_menu:          {action: locate, name: hero_menu}
     bag:                {action: locate, name: bag}
-    alliance_menu:      {action: locate, name: alliance_menu}
+    alliance_menu:      {action: locate, name: alliance_menu_static}
     campaign_menu:      {action: locate, name: campaign_menu}
     radar_station:      {action: locate, name: radar_station}
   world_map_regional:

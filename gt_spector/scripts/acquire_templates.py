@@ -33,7 +33,6 @@ CLICK_POINTS = {
     "region_search": (439, 15),
     "alliance_flags": (485, 21),
     "radar_station": (103, 616),
-    "alliance_menu": (968, 796),
     "hero_menu": (1038, 796),
     "bag": (861, 782),
     "campaign_menu": (800, 800),
@@ -43,11 +42,18 @@ CLICK_POINTS = {
 # mission_menu_count reads the completed-mission badge (future reward auto-collect).
 # chat_static identifies the chat button (invariant); chat_unread is the
 # red-background @ badge indicating unread messages (future: alert on unread).
+# alliance_menu_static identifies the alliance menu (invariant); alliance_menu_count
+# indicates rewards available inside the alliance menu (future: claim).
+# vip_reward shows if a VIP reward is available; shifts ~30px right when VIP
+# level > 9.
 EXTRA_TEMPLATES = {
     "mission_menu_static": (34, 698),
     "mission_menu_count": (55, 671),
     "chat_static": (139, 810),
     "chat_unread": (160, 792),
+    "alliance_menu_static": (951, 800),
+    "alliance_menu_count": (980, 772),
+    "vip_reward": (137, 49),
 }
 
 PATCH_HALF = 24  # fallback 48x48 capture box when tight-boxing fails
