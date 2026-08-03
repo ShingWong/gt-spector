@@ -52,6 +52,10 @@ def load_templates() -> list[Template]:
     p = _index_path()
     if not p.exists():
         return []
+    return _cached("index", p, lambda: _parse_index(p))
+
+
+def _parse_index(p: Path) -> list[Template]:
     data = json.loads(p.read_text())
     try:
         return [Template(**m) for m in data]
@@ -68,6 +72,7 @@ def save_template(t: Template, patch: np.ndarray, mask: np.ndarray | None = None
         Image.fromarray((mask * 255).astype(np.uint8)).save(_mask_path(t.name))
     templates.append(t)
     _index_path().write_text(json.dumps([asdict(x) for x in templates], indent=2))
+    _invalidate_cache()
     return t
 
 
@@ -76,17 +81,43 @@ def delete_template(name: str) -> None:
     _index_path().write_text(json.dumps([asdict(x) for x in templates], indent=2))
     _patch_path(name).unlink(missing_ok=True)
     _mask_path(name).unlink(missing_ok=True)
+    _invalidate_cache()
+
+
+# ── Cache ─────────────────────────────────────────────────────────────
+# Templates and patches are read from disk on every locate, which dominates
+# the hot path (PNG decode ~20ms each). Cache them by file mtime so repeated
+# calls are free while newly-authored templates (viewer writes new mtime) are
+# picked up without a restart.
+_cache: dict[str, tuple[float, object]] = {}
+
+
+def _invalidate_cache() -> None:
+    _cache.clear()
+
+
+def _cached(key: str, path: Path, load) -> object | None:
+    try:
+        mtime = path.stat().st_mtime
+    except FileNotFoundError:
+        return None
+    hit = _cache.get(key)
+    if hit and hit[0] == mtime:
+        return hit[1]
+    value = load()
+    _cache[key] = (mtime, value)
+    return value
 
 
 def get_patch(name: str) -> np.ndarray | None:
     p = _patch_path(name)
-    if not p.exists():
-        return None
-    return np.asarray(Image.open(p).convert("RGB"))
+    return _cached(f"patch:{name}", p,
+                   lambda: np.asarray(Image.open(p).convert("RGB")))
 
 
 def get_mask(name: str) -> np.ndarray | None:
     p = _mask_path(name)
     if not p.exists():
         return None
-    return (np.asarray(Image.open(p).convert("L")) > 127).astype(np.uint8)
+    return _cached(f"mask:{name}", p,
+                   lambda: (np.asarray(Image.open(p).convert("L")) > 127).astype(np.uint8))
