@@ -126,7 +126,8 @@ locations:
   avatar:            {x: 49,  y: 39,  screens: [world_map, world_map_regional, shelter_view]}
   shelter:           {x: 65,  y: 800, screens: [world_map, world_map_regional], static: true}
   region_static:     {x: 59,  y: 792, screens: [shelter_view]}
-  back_static:       {x: 44,  y: 38,  screens: [avatar_menu]}
+  back_static:       {x: 44,  y: 38,  screens: [avatar_menu, alliance_menu]}
+  alliance_title_static: {x: 157, y: 31, screens: [alliance_menu]}
   commander_static:  {x: 141, y: 40,  screens: [avatar_menu]}
   ranking_static:    {x: 61,  y: 786, screens: [avatar_menu]}
   settings_static:   {x: 159, y: 789, screens: [avatar_menu]}
@@ -188,6 +189,25 @@ screens:
   shelter_view:
     description: shelter/base view. Identified by avatar border + region_static icon.
     templates: [avatar, region_static]
+  bag_menu:
+    description: bag/inventory menu. Not yet broken down.
+    templates: []
+  mission_menu:
+    description: mission menu. Not yet broken down.
+    templates: []
+  messages:
+    description: messages screen. Not yet broken down.
+    templates: []
+  hero_menu:
+    description: hero menu. Not yet broken down.
+    templates: []
+  region_overview:
+    description: region overview screen. Not yet broken down.
+    templates: []
+  alliance_menu:
+    description: alliance menu. Identified by the alliance title. Back button is
+      the same back_static as the avatar menu.
+    templates: [alliance_title_static]
   avatar_menu:
     description: avatar / commander info menu. Identified by back + commander_static.
     templates: [back_static, commander_static]
@@ -261,6 +281,17 @@ navigation:
     settings:           {action: locate, name: settings_static}
   shelter_view:
     world_map:          {action: locate, name: region_static}
+    alliance_menu:      {action: locate, name: alliance_menu_static}
+    avatar_menu:        {action: locate, name: avatar}
+    bag_menu:           {action: locate, name: bag}
+    mission_menu:       {action: locate, name: mission_menu_static}
+    chat:               {action: locate, name: chat_static}
+    messages:           {action: locate, name: messages_static}
+    hero_menu:          {action: locate, name: hero_static}
+    region_overview:    {action: locate, name: region_overview}
+  alliance_menu:
+    shelter_view:       {action: locate, name: back_static}
+    world_map:          {action: locate, name: back_static}
   exit_dialog:
     shelter:            {action: click, location: exit_cancel}
     world_map:          {action: click, location: exit_cancel}

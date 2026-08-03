@@ -77,6 +77,7 @@ EXTRA_TEMPLATES = {
     "login_use_another_static": (518, 369),
     "login_select_igg_id_static": (621, 34),
     "login_igg_id": (373, 161),
+    "alliance_title_static": (157, 31),
     "likes_static": (261, 790),
     "more_static": (361, 789),
     "stamina_value": (992, 275),
