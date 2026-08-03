@@ -86,11 +86,11 @@ navigation:
     world_map_regional: {action: zoom_out}
     shelter:            {action: click, location: shelter}
     chat:               {action: click, location: chat}
-    hero_menu:          {action: click, location: hero_menu}
-    bag_menu:           {action: click, location: bag_menu}
-    alliance_menu:      {action: click, location: alliance_menu}
-    campaign_menu:      {action: click, location: campaign_menu}
-    radar_station:      {action: click, location: radar_station}
+    hero_menu:          {action: locate, name: hero_menu}
+    bag_menu:           {action: locate, name: bag_menu}
+    alliance_menu:      {action: locate, name: alliance_menu}
+    campaign_menu:      {action: locate, name: campaign_menu}
+    radar_station:      {action: locate, name: radar_station}
   world_map_regional:
     world_map:          {action: zoom_in}
     shelter:            {action: click, location: shelter}

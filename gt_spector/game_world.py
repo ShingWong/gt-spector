@@ -12,8 +12,9 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ DEFAULT_YAML = Path(__file__).parent / "game_world.yaml"
 
 
 def _pixel_in_range(rgb: tuple[int, int, int], fp: list[int]) -> bool:
-    x, y, r0, r1, g0, g1, b0, b1 = fp
+    _, _, r0, r1, g0, g1, b0, b1 = fp
     r, g, b = rgb
     return r0 <= r <= r1 and g0 <= g <= g1 and b0 <= b <= b1
 
@@ -30,12 +31,13 @@ class GameWorld:
     def __init__(self, path: Path = DEFAULT_YAML) -> None:
         self.path = path
         with open(path) as f:
-            self.data = yaml.safe_load(f)
-        self.locations = self.data.get("locations", {})
-        self.screens = self.data.get("screens", {})
-        self.zones = self.data.get("zones", {})
-        self.map_levels = self.data.get("map_levels", {})
-        self.navigation = self.data.get("navigation", {})
+            self.data: dict[str, Any] = yaml.safe_load(f)
+        self.locations: dict[str, Any] = self.data.get("locations", {})
+        self.screens: dict[str, Any] = self.data.get("screens", {})
+        self.zones: dict[str, Any] = self.data.get("zones", {})
+        self.map_levels: dict[str, Any] = self.data.get("map_levels", {})
+        self.navigation: dict[str, Any] = self.data.get("navigation", {})
+        self._locator: Any = None
         # Index locations by screen for fast lookup.
         self._loc_index: dict[str, dict[str, tuple[int, int]]] = {}
         for name, info in self.locations.items():
@@ -56,7 +58,7 @@ class GameWorld:
         return list(self.zones)
 
     # ── Identification ──────────────────────────────────────────────────────
-    def identify(self, session) -> str | None:
+    def identify(self, session: Any) -> str | None:
         """Return the screen name whose fingerprint fully matches, else None."""
         for name, spec in self.screens.items():
             fp = spec.get("fingerprint")
@@ -66,16 +68,16 @@ class GameWorld:
                 return name
         return None
 
-    def _matches(self, session, fingerprint: list[list[int]]) -> bool:
+    def _matches(self, session: Any, fingerprint: list[list[int]]) -> bool:
         try:
             for entry in fingerprint:
                 if not _pixel_in_range(session.get_pixel(entry[0], entry[1]), entry):
                     return False
             return True
-        except Exception:
+        except Exception:  # noqa: BLE001
             return False
 
-    def map_level(self, session) -> str | None:
+    def map_level(self, session: Any) -> str | None:
         """Return 'world_map' or 'world_map_regional' via minimap discriminator."""
         for name, spec in self.map_levels.items():
             fp = spec.get("fingerprint")
@@ -84,7 +86,7 @@ class GameWorld:
         return None
 
     # ── Actions ─────────────────────────────────────────────────────────────
-    def click(self, session, screen: str, name: str) -> bool:
+    def click(self, session: Any, screen: str, name: str) -> bool:
         pos = self.loc(screen, name)
         if pos is None:
             logger.warning("No location %s on screen %s", name, screen)
@@ -92,7 +94,33 @@ class GameWorld:
         session.click(*pos)
         return True
 
-    def navigate(self, session, target: str, screen: str | None = None) -> bool:
+    def set_locator(self, locator: Any) -> None:
+        self._locator = locator
+
+    def _resolve_hop(self, session: Any, screen: str, target: str) -> bool:
+        action = self.navigation.get(screen, {}).get(target)
+        if action is None:
+            return False
+        if action.get("action") == "click":
+            self.click(session, screen, action["location"])
+            return True
+        if action.get("action") == "locate":
+            if self._locator is None:
+                return False
+            res = self._locator.find(session.frame, action["name"])
+            if not res.found:
+                return False
+            session.click(res.cx, res.cy)
+            return True
+        if action.get("action") == "zoom_out":
+            session.scroll(5, 4)
+            return True
+        if action.get("action") == "zoom_in":
+            session.scroll(-5, 4)
+            return True
+        return False
+
+    def navigate(self, session: Any, target: str, screen: str | None = None) -> bool:
         """Walk the navigation graph from current `screen` to `target`.
 
         Returns True if target screen reached (via identify()), else False.
@@ -128,7 +156,7 @@ class GameWorld:
 
         # Reconstruct path and execute each hop.
         path = []
-        node = found
+        node: str | None = found
         while node is not None:
             path.append(node)
             node = prev[node]
@@ -136,13 +164,7 @@ class GameWorld:
 
         current = screen
         for nxt in path[1:]:
-            action = edges[current][nxt]
-            if action.get("action") == "click":
-                self.click(session, current, action["location"])
-            elif action.get("action") == "zoom_out":
-                session.scroll(5, 4)
-            elif action.get("action") == "zoom_in":
-                session.scroll(-5, 4)
+            self._resolve_hop(session, current, nxt)
             import time
 
             time.sleep(2.5)
@@ -155,7 +177,7 @@ class GameWorld:
         return self.identify(session) == target
 
     # ── Interactive exploration ─────────────────────────────────────────────
-    def explore(self, session) -> None:
+    def explore(self, session: Any) -> None:
         """Ask the user to identify the current unknown screen and its clicks."""
         name = input("What screen is this? (snake_case) > ").strip()
         while True:
