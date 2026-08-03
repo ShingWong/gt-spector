@@ -19,9 +19,13 @@ from gt_spector import templates as T
 
 # User-provided click points (world map / regional). Names are the canonical
 # snake_case labels used across the game-world KB.
+# STATIC locations (fixed UI, direct click, no template search needed):
+STATIC_LOCATIONS = {
+    "shelter": (65, 800),
+}
+# Locations that need a template search (dynamic / drift / non-fixed):
 CLICK_POINTS = {
     "avatar": (49, 39),
-    "shelter": (65, 800),
     "map_search": (38, 623),
     "chat": (150, 800),
     "vip_menu": (113, 56),

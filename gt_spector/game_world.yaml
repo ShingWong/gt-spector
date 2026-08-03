@@ -7,13 +7,15 @@ version: 1
 # Static UI chrome is reliable. "drifts" marks world-scoped anchors that may
 # move with the camera but are tracked for reference.
 locations:
+  exit_cancel:       {x: 359, y: 654, screens: [exit_dialog]}
+  exit_ok:           {x: 801, y: 648, screens: [exit_dialog]}
   login_failed_ok:   {x: 499, y: 647, screens: [login_failed_dialog]}
   login_failed_device_login: {x: 420, y: 767, screens: [login_failed_dialog]}
   login_failed_more: {x: 558, y: 767, screens: [login_failed_dialog]}
   afk_ok:            {x: 741, y: 676, screens: [afk_popup]}
   glory_league_go:   {x: 575, y: 654, screens: [glory_league_event]}
   avatar:            {x: 49,  y: 39,  screens: [world_map, world_map_regional]}
-  shelter:           {x: 65,  y: 800, screens: [world_map, world_map_regional]}
+  shelter:           {x: 65,  y: 800, screens: [world_map, world_map_regional], static: true}
   map_search:        {x: 38,  y: 623, screens: [world_map, world_map_regional]}
   chat:              {x: 150, y: 800, screens: [world_map, world_map_regional]}
   vip_menu:          {x: 113, y: 56,  screens: [world_map, world_map_regional]}
@@ -50,6 +52,9 @@ map_levels:
 
 # Screens with stable anchor fingerprints (captured live, refined over time).
 screens:
+  exit_dialog:
+    description: '"Exit game?" confirmation with CANCEL / OK'
+    fingerprint: []
   glory_league_event:
     description: 'Pompeii Glory League event splash with GO button'
     fingerprint:
@@ -68,16 +73,19 @@ screens:
   world_map:
     description: world map, zoomed in (no minimap)
     fingerprint:
-      - [48, 44, 40, 120, 80, 140, 110, 170]   # player_avatar blue-ish
-      - [485, 21, 90, 150, 95, 155, 105, 165]  # alliance_flags
+      - [15, 9, 110, 180, 90, 160, 60, 130]   # avatar border top-left corner (static)
+      - [15, 68, 90, 160, 80, 150, 70, 130]   # avatar border bottom-left (static)
   world_map_regional:
     description: regional map, minimap top-right
     fingerprint:
-      - [48, 44, 40, 120, 80, 140, 110, 170]   # player_avatar blue-ish
+      - [15, 9, 110, 180, 90, 160, 60, 130]   # avatar border top-left corner (static)
       - [1010, 45, 140, 255, 140, 255, 140, 255]  # minimap present
 
 # Navigation: reachable screens from each screen + recommended action.
 navigation:
+  exit_dialog:
+    shelter:            {action: click, location: exit_cancel}
+    world_map:          {action: click, location: exit_cancel}
   afk_popup:
     world_map:          {action: click, location: afk_ok}
   login_failed_dialog:
