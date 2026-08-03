@@ -1,13 +1,22 @@
-import json
-import os
-import subprocess
+"""HelpBot: navigate to the alliance help dialog and run the help loop.
+
+Uses the deterministic game-world identification system (no VLM, no hardcoded
+ESC chains). Navigation: from any screen -> alliance_menu (via GameWorld.navigate),
+then click the help trigger to open the help dialog, then poll the gold help
+button pixel and click while it is active.
+"""
+
+from __future__ import annotations
+
 import time
-from pathlib import Path
 from typing import Any
 
-import numpy as np
+from gt_spector.locator import Locator
+from gt_spector.scripts import help_loop
 
-TABLE_PATH = Path(os.path.expanduser("~/.config/gt-spector/nav_table.json"))
+# The help trigger on the alliance menu (red when a request is active).
+TRIGGER_X = 1097
+TRIGGER_Y = 431
 
 
 class HelpBot:
@@ -15,81 +24,60 @@ class HelpBot:
     expected_screen = "ALLIANCE"
 
     def __init__(self) -> None:
-        self._badge_buttons: list[dict[str, Any]] = []
-        self._n_cycles = 0
         self._display = 0
-
-    def _load_badges(self) -> None:
-        try:
-            data = json.loads(TABLE_PATH.read_text())
-            btns = data.get("states", {}).get("ALLIANCE", {}).get("buttons", [])
-            self._badge_buttons = [b for b in btns if b.get("badge")]
-        except (FileNotFoundError, json.JSONDecodeError):
-            self._badge_buttons = []
+        self._gw = None
+        self._session = None
+        self._locator = Locator()
+        self._n_cycles = 0
+        self.help_clicks = 0
 
     def on_start(self, display: int) -> None:
+        from gt_spector.game_world import GameWorld
+        from gt_spector.session import Session
+
         self._display = display
+        self._gw = GameWorld()
+        self._gw.set_locator(self._locator)
+        self._session = Session(f":{display}", source=f"shm://{display}")
         self._n_cycles = 0
-        self._load_badges()
+        self.help_clicks = 0
 
     def on_stop(self, display: int) -> None:
         pass
 
-    def tick(self, frame: np.ndarray) -> str | None:
-        if not self._badge_buttons:
-            return "no_badges"
+    def navigate_to_help_dialog(self) -> str | None:
+        """Navigate to the alliance menu, then click the help trigger."""
+        self._session.refresh()
+        screen = self._gw.identify(self._session)
+        if screen is None:
+            return "unknown_screen"
 
-        for btn in self._badge_buttons:
-            x, y = btn["x"], btn["y"]
-            r, g, b = frame[y, x, :3]
-            if r > 150 and g < 100 and b < 100:
-                return f"badge_{btn['label']}"
+        # From a known screen, walk the graph to alliance_menu.
+        if screen != "alliance_menu":
+            if not self._gw.navigate(self._session, "alliance_menu"):
+                return "nav_failed"
+            time.sleep(2)
+            self._session.refresh()
 
+        # Click the help trigger (red indicator / help menu) to open the dialog.
+        r, g, b = self._session.get_pixel(TRIGGER_X, TRIGGER_Y)
+        if help_loop.is_red(r, g, b):
+            self._session.click(TRIGGER_X, TRIGGER_Y)
+            time.sleep(1)
+            self._session.refresh()
+            return "help_dialog_opened"
+        return "no_help_trigger"
+
+    def tick(self, frame: Any) -> str | None:
+        if self._n_cycles == 0:
+            status = self.navigate_to_help_dialog()
+            self._n_cycles += 1
+            return status
+
+        clicked = help_loop.run(self._session, None)
+        if clicked:
+            self.help_clicks += 1
+            self._n_cycles = 0  # re-navigate next cycle (help sent, dialog may close)
+            return f"help_clicked_{self.help_clicks}"
         self._n_cycles += 1
         return None
-
-    @staticmethod
-    def navigate_to_alliance(display: int) -> bool:
-        """Navigate from any screen to alliance. Relies on hardcoded ESC chain + clicks."""
-        disp_str = f":{display}"
-
-        def wid() -> str | None:
-            r = subprocess.run(
-                ["xdotool", "search", "--name", "Doomsday: Last Survivors"],
-                capture_output=True, text=True, env={"DISPLAY": disp_str},
-                check=False,
-            )
-            for l in r.stdout.strip().splitlines():
-                if l.strip().isdigit():
-                    return l.strip()
-            return None
-
-        def click(x: int, y: int) -> None:
-            w = wid()
-            if w:
-                subprocess.run(["xdotool", "mousemove", "--window", w, str(x), str(y)],
-                               capture_output=True, env={"DISPLAY": disp_str}, check=False)
-                subprocess.run(["xdotool", "click", "--window", w, "1"],
-                               capture_output=True, env={"DISPLAY": disp_str}, check=False)
-
-        def esc() -> None:
-            w = wid()
-            if w:
-                subprocess.run(["xdotool", "key", "--window", w, "Escape"],
-                               capture_output=True, env={"DISPLAY": disp_str}, check=False)
-
-        # ESC chain: any screen → settlement
-        for _ in range(8):
-            esc()
-            time.sleep(2)
-
-        # Click alliance button in bottom toolbar
-        click(847, 740)
-        time.sleep(3)
-
-        # If exit dialog appeared, cancel and retry
-        click(300, 630)
-        time.sleep(1)
-        click(847, 740)
-        time.sleep(3)
-        return True
