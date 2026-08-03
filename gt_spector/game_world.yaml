@@ -38,6 +38,18 @@
 # other. This is expected - normalized correlation is robust but not free of
 # background influence. Default score_threshold (0.75) leaves a safe margin.
 #
+# Shelter screen note (2026-08-02):
+# The shelter (base) view shares almost ALL toolbar components with the
+# region map: bag, mission_menu_static, chat_static, alliance_menu_static,
+# messages_static, hero_static, region_overview, avatar all match at ~1.0.
+# Differences vs region map:
+# - Has the REGION icon (region_static at 37,771) instead of a shelter icon.
+# - Low score on a template is a SIGNAL, not a false positive:
+#   * radar_station not matching => radar station not built on this account.
+#   * bag_count low => no new inventory items.
+#   * hero_count low => no new hero / hero icon absent.
+#   So count/badge templates double as "is there anything new" detectors.
+#
 # Mission menu note (2026-08-02):
 # - mission_menu_static: the invariant part of the mission button, used to
 #   identify the mission menu reliably.
@@ -145,7 +157,7 @@ locations:
   region_search:     {x: 439, y: 15,  screens: [world_map, world_map_regional]}
   alliance_flags:    {x: 485, y: 21,  screens: [world_map, world_map_regional]}
   mission_menu:      {x: 34,  y: 698, screens: [world_map]}
-  radar_station:     {x: 103, y: 616, screens: [world_map], drifts: true}
+  radar_station:     {x: 103, y: 616, screens: [world_map], drifts: true, note: 'absent if radar not built'}
   alliance_menu:     {x: 951, y: 800, screens: [world_map], drifts: true}
   hero_menu:         {x: 1046, y: 802, screens: [world_map], drifts: true}
   bag:               {x: 875, y: 796, screens: [world_map], drifts: true}
