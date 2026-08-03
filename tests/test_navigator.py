@@ -1,4 +1,12 @@
 import numpy as np
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _fast_navigation(monkeypatch):
+    monkeypatch.setattr("gt_spector.navigator.MIN_SETTLE", 0.0)
+    monkeypatch.setattr("gt_spector.navigator.MAX_SETTLE_TRIES", 5)
+    monkeypatch.setattr("gt_spector.navigator.MAX_ESC", 3)
 
 
 class FakeGW:
@@ -67,7 +75,6 @@ def test_settle_waits_until_screen_changes():
     gw = FakeGW({"a": "a", "b": "b"})
     s = FakeSession("a")
     n = _nav(gw, s)
-    n.MIN_SETTLE = 0.0  # don't actually sleep in tests
     # source is "a"; identify will return "a" for the first 3 calls then "b"
     calls = {"n": 0}
     def fake_identify(session):
@@ -85,7 +92,6 @@ def test_settle_returns_none_after_max_tries():
     gw = FakeGW({"a": "a"})
     s = FakeSession("a")
     n = _nav(gw, s)
-    n.MIN_SETTLE = 0.0
     gw.identify = lambda session: "a"  # never changes
     assert n._settle("a") is None
 
@@ -94,7 +100,6 @@ def test_goto_success():
     gw = FakeGW({"a": "a", "b": "b"})
     s = FakeSession("a")
     n = _nav(gw, s)
-    n.MIN_SETTLE = 0.0
     result = n.goto("b")
     assert result == "b"
     assert gw.screens[s.name] == "b"
@@ -106,7 +111,6 @@ def test_goto_recomputes_after_different_landing():
     gw.navigation["b"] = {"c": {"action": "click", "location": "c_btn"}}
     s = FakeSession("a")
     n = _nav(gw, s)
-    n.MIN_SETTLE = 0.0
     # The first hop from a -> b always lands on "c" instead.
     orig_resolve = gw._resolve_hop
     hop_count = {"n": 0}
@@ -122,11 +126,60 @@ def test_goto_recomputes_after_different_landing():
     assert gw.screens[s.name] == "c"
 
 
+def test_goto_recomputes_after_landing_intermediate():
+    gw = FakeGW({"a": "a", "b": "b", "c": "c", "d": "d"})
+    gw.navigation["a"] = {"b": {"action": "click", "location": "b_btn"}}
+    gw.navigation["b"] = {"c": {"action": "click", "location": "c_btn"}}
+    gw.navigation["d"] = {"c": {"action": "click", "location": "c_btn"}}
+    s = FakeSession("a")
+    n = _nav(gw, s)
+
+    def resolve(session, screen, target):
+        session.name = "c" if target == "c" else "d"
+        return True
+    gw._resolve_hop = resolve
+
+    route_calls = {"n": 0}
+    orig_route_to = n.route_to
+    def route_to(target, screen=None):
+        route_calls["n"] += 1
+        return orig_route_to(target, screen)
+    n.route_to = route_to
+
+    result = n.goto("c")
+    assert result == "c"
+    assert gw.screens[s.name] == "c"
+    assert route_calls["n"] > 1
+
+
+def test_goto_returns_stuck_screen_on_hop_failure():
+    gw = FakeGW({"a": "a", "b": "b"})
+    s = FakeSession("a")
+    n = _nav(gw, s)
+    gw._resolve_hop = lambda session, screen, target: False
+    assert n.goto("b") == "a"
+
+
+def test_goto_returns_stuck_screen_on_esc_exhaustion():
+    gw = FakeGW({"a": "a", "b": "b"})
+    s = FakeSession("a")
+    n = _nav(gw, s)
+
+    def resolve(session, screen, target):
+        session.name = None
+        return True
+    gw._resolve_hop = resolve
+    gw.identify = lambda session: gw.screens.get(session.name)
+
+    result = n.goto("b")
+    assert result is not None
+    assert result == "a"
+
+
 def test_goto_esc_on_unknown_then_succeed():
     gw = FakeGW({"a": "a", "b": "b"})
     s = FakeSession("a")
     n = _nav(gw, s)
-    n.MIN_SETTLE = 0.0
     # On first hop, land on unknown (identify returns None). ESC -> b.
     resolve_called = {"n": 0}
     orig_resolve = gw._resolve_hop
@@ -155,7 +208,6 @@ def test_goto_no_path():
     gw = FakeGW({"a": "a"})
     s = FakeSession("a")
     n = _nav(gw, s)
-    n.MIN_SETTLE = 0.0
     assert n.goto("b") is None
 
 
@@ -163,6 +215,5 @@ def test_goto_already_at_target():
     gw = FakeGW({"a": "a", "b": "b"})
     s = FakeSession("b")
     n = _nav(gw, s)
-    n.MIN_SETTLE = 0.0
     assert n.goto("b") == "b"
     assert s.esc_count == 0
