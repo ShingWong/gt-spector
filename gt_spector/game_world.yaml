@@ -126,6 +126,8 @@ locations:
   settings_account:  {x: 218, y: 510, screens: [settings]}
   change_account:    {x: 573, y: 660, screens: [account]}
   account_title:     {x: 573, y: 145, screens: [account]}
+  igg_id_static:     {x: 197, y: 223, screens: [change_account]}
+  igg_account_static: {x: 735, y: 262, screens: [change_account]}
   system_settings_static: {x: 466, y: 248, screens: [settings]}
   account_static:    {x: 260, y: 417, screens: [settings]}
   map_search:        {x: 38,  y: 623, screens: [world_map, world_map_regional], static: true}
@@ -173,6 +175,9 @@ screens:
   settings:
     description: settings menu. Account option at 218,510 (login/account switching).
     templates: [settings_title_static]
+  change_account:
+    description: change-account dialog. IGG/Google/Facebook login options.
+    templates: [igg_id_static]
   account:
     description: account management menu. CHANGE ACCOUNT at 573,660.
     templates: [account_title_static]
@@ -214,6 +219,7 @@ navigation:
     system_settings:    {action: locate, name: system_settings_static}
   account:
     settings:           {action: locate, name: account_exit_static}
+    change_account:     {action: locate, name: change_account_static}
   avatar_menu:
     world_map:          {action: locate, name: back_static}
     settings:           {action: locate, name: settings_static}

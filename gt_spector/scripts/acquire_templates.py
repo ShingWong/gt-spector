@@ -68,6 +68,8 @@ EXTRA_TEMPLATES = {
     "account_title_static": (573, 145),
     "account_exit_static": (1007, 143),
     "change_account_static": (573, 660),
+    "igg_id_static": (197, 223),
+    "igg_account_static": (735, 262),
     "likes_static": (261, 790),
     "more_static": (361, 789),
     "stamina_value": (992, 275),

@@ -449,5 +449,27 @@
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
     "reader": "vlm"
+  },
+  {
+    "name": "igg_id_static",
+    "shape": "rect",
+    "x": 164,
+    "y": 211,
+    "w": 67,
+    "h": 24,
+    "game_version": "Doomsday_1.59.0",
+    "score_threshold": 0.75,
+    "reader": "vlm"
+  },
+  {
+    "name": "igg_account_static",
+    "shape": "rect",
+    "x": 720,
+    "y": 242,
+    "w": 30,
+    "h": 41,
+    "game_version": "Doomsday_1.59.0",
+    "score_threshold": 0.75,
+    "reader": "vlm"
   }
 ]
