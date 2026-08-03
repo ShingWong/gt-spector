@@ -53,10 +53,20 @@
 # When a count reaches 3 digits (>= 100), the badge shows "..." instead of
 # the number. Treat "..." as a valid "present with a large count" signal.
 #
-# Map alliance help (2026-08-02):# - map_alliance_help: an alliance help button on the world map. Can be
+# Map alliance help (2026-08-02):
+# - map_alliance_help: an alliance help button on the world map. Can be
 #   MISSING when no help is requested; if present, an alliance member has
 #   requested help. Same mechanic as "help" inside the alliance menu (to be
 #   mapped later). This is the button the Help bot targets.
+# - The top-right notification row (alliance help, event icons) is
+#   TRANSIENT and self-managing: icons appear/disappear with game events
+#   (arms race alert, another member fulfilling the help request, etc.) and
+#   shift the row's layout. Always locate these via template search and
+#   treat a missing match as "no action needed" - never fixed-click them.
+# - arms_race_static: an arms-race event notification icon that can appear
+#   in the same row and push the alliance-help icon left. Transient.
+#   Observed 2026-08-02: the help request icon disappeared because another
+#   member already fulfilled the request.
 #
 # Bag / hero note (2026-08-02):
 # - bag: identifies the bag/inventory button (its icon; no separate _static).
