@@ -19,6 +19,10 @@
 # - stamina_add: button that opens the stamina dialog where consumables can
 #   be exchanged for stamina.
 #
+# Navigation rule (2026-08-02):
+# ESC always takes you back one menu level. This is a reliable universal
+# "back" action for any screen that has a visible close/back button too.
+#
 # Template scoring note (2026-08-02):
 # The shelter view and world map can have slightly different backgrounds. The
 # same template (e.g. avatar border) scores ~1.0 on one view and ~0.98 on the

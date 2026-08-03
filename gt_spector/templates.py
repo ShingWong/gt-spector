@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -8,7 +9,14 @@ import numpy as np
 from PIL import Image
 
 GAME_VERSION = "Doomsday_1.59.0"
-TEMPLATE_ROOT = Path.home() / ".config" / "gt-spector" / "templates"
+
+# Templates are version-controlled with the project. The store lives in the
+# repo (git-tracked) so template data is never lost. Authoring via the viewer
+# writes straight into the git tree. TEMPLATE_ROOT can be overridden for tests
+# or a user-local overlay (e.g. env GT_SPECTOR_TEMPLATE_ROOT).
+TEMPLATE_ROOT = Path(__file__).resolve().parent / "templates_store"
+if env_root := os.environ.get("GT_SPECTOR_TEMPLATE_ROOT"):
+    TEMPLATE_ROOT = Path(env_root)
 
 
 @dataclass
