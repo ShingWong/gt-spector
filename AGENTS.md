@@ -46,6 +46,19 @@ python -m gt_spector --session :9
 python -m gt_spector --session :9 --cli
 ```
 
+## CLI navigation
+
+Drive bots screen-to-screen from the interactive CLI (see `docs/cli.md`):
+
+```bash
+python -m gt_spector --session :<display> --cli
+```
+
+Core commands: `where`, `go <screen> [-v]`, `route <screen>`,
+`locate <template>`, `label <screen>`, `screens`, `loc <screen> <name>`.
+`-v` on `go` prints each hop as it moves. Navigation is template-based
+(no VLM).
+
 ## Code Style
 
 - Python: ruff + mypy strict
