@@ -10,6 +10,68 @@ from gt_spector.game_world import GameWorld
 from gt_spector.locator import Locator
 from gt_spector.navigator import Navigator
 
+GQ_LOW = (825, 253)
+GQ_HIGH = (966, 253)
+GQ_HIGH_BRIGHT_R = 80
+GQ_SETTLE = 2.0
+
+FR_LOW = (745, 310)
+FR_MID = (858, 310)
+FR_HIGH = (973, 310)
+
+
+def read_graphics_quality(session: Any) -> str:
+    r, _, _ = session.get_pixel(*GQ_HIGH)
+    return "high" if r >= GQ_HIGH_BRIGHT_R else "low"
+
+
+def set_graphics_quality(session: Any, target: str) -> str:
+    current = read_graphics_quality(session)
+    if current == target:
+        return current
+    click = GQ_LOW if target == "low" else GQ_HIGH
+    session.click(*click)
+    import time
+    time.sleep(GQ_SETTLE)
+    session.refresh()
+    return read_graphics_quality(session)
+
+
+def read_frame_rate(session: Any) -> str:
+    mid_r, _, _ = session.get_pixel(*FR_MID)
+    high_r, _, _ = session.get_pixel(*FR_HIGH)
+    if high_r >= 120:
+        return "high"
+    if mid_r >= 90:
+        return "mid"
+    return "low"
+
+
+def set_frame_rate(session: Any, target: str) -> str:
+    current = read_frame_rate(session)
+    if current == target:
+        return current
+    click = {"low": FR_LOW, "mid": FR_MID, "high": FR_HIGH}[target]
+    session.click(*click)
+    import time
+    time.sleep(GQ_SETTLE)
+    session.refresh()
+    return read_frame_rate(session)
+
+
+IN_GAME_SETTINGS = {
+    "graphics-quality": {
+        "values": {"low", "high"},
+        "read": read_graphics_quality,
+        "set": set_graphics_quality,
+    },
+    "frame-rate": {
+        "values": {"low", "mid", "high"},
+        "read": read_frame_rate,
+        "set": set_frame_rate,
+    },
+}
+
 
 class CliSession(cmd.Cmd):
     intro = "gt-spector CLI. Type help or ? to list commands."
