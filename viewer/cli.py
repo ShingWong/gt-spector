@@ -1,4 +1,5 @@
 import cmd
+import io
 import shlex
 from datetime import UTC, datetime
 from typing import Any
@@ -135,6 +136,7 @@ class CliSession(cmd.Cmd):
         if not name:
             print("Usage: locate <template>")
             return
+        self._session.refresh()
         r = self._locator.find(self._session.frame, name)
         print(f"{name}: found={r.found} score={r.score:.3f} center=({r.cx},{r.cy})" if r.found
               else f"{name}: not found")
@@ -148,7 +150,7 @@ class CliSession(cmd.Cmd):
         import contextlib
 
         from gt_spector.scripts import label_fixed
-        with contextlib.redirect_stdout(None):
+        with contextlib.redirect_stdout(io.StringIO()):
             label_fixed.main_args(self._display_num(), screen)
         print(f"labeled fixed templates for {screen}")
 

@@ -19,10 +19,10 @@ The `<display>` is the X display for the headless game (e.g. `:9`).
 | `where` | Report the current screen | `where` |
 | `go <screen> [-v]` | Navigate to a screen, hopping through the graph | `go alliance_menu` |
 | `route <screen>` | Show the BFS path to a screen without moving | `route alliance_menu` |
-| `locate <template>` | Find a template's current position on the frame | `locate help_btn` |
+| `locate <template>` | Find a template's current position on the frame | `locate alliance_title_static` |
 | `label <screen>` | Draw that screen's fixed templates on the overlay | `label alliance_menu` |
 | `screens` | List all known screens | `screens` |
-| `loc <screen> <name>` | Show a location's coords | `loc alliance_menu recruit_btn` |
+| `loc <screen> <name>` | Show a location's coords | `loc alliance_menu back_static` |
 
 Raw commands also remain available: `pixel`, `click`, `key`, `type`, `move`,
 `drag`.
@@ -33,9 +33,9 @@ Raw commands also remain available: `pixel`, `click`, `key`, `type`, `move`,
 
 ```
 > go alliance_menu -v
-  hop world -> alliance
-  landed: alliance
-  hop alliance -> alliance_menu
+  hop select_igg_id -> world_map
+  landed: world_map
+  hop world_map -> alliance_menu
   landed: alliance_menu
 arrived at alliance_menu
 ```
@@ -47,12 +47,12 @@ Static commands (`where`, `route`, `locate`, `label`, `screens`, `loc`) have no
 
 ```
 > where
-world
+select_igg_id
 
 > go alliance_menu -v
-  hop world -> alliance
-  landed: alliance
-  hop alliance -> alliance_menu
+  hop select_igg_id -> world_map
+  landed: world_map
+  hop world_map -> alliance_menu
   landed: alliance_menu
 arrived at alliance_menu
 

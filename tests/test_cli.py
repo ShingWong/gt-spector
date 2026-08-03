@@ -1,6 +1,3 @@
-import shlex
-
-
 def test_cli_commands_exist():
     from gt_spector.session import Session
     from viewer.cli import CliSession
@@ -25,30 +22,45 @@ def test_cli_navigation_commands_exist():
 
 
 def test_cli_go_parses_verbose_flag(monkeypatch):
-    from gt_spector.session import Session
-    from viewer.cli import CliSession
-    s = Session(":99")
-    cli = CliSession.__new__(CliSession)
-    cli._session = s
-    # stub the navigator
-    traced = {}
-    class FakeNav:
-        def goto(self, target):
-            return target
-        def route_to(self, target):
-            return ["a", target]
-    cli._navigator = FakeNav()
-    cli._gw = object()
-    cli._trace = traced
+    from viewer import cli as cli_mod
 
-    # go with -v must pass a trace; go without -v must not
-    # we capture via monkeypatching print into traced["calls"]
-    out = []
-    import builtins
-    monkeypatch.setattr(builtins, "print", lambda *a, **k: out.append(a[0]))
-    # Simulate the -v flag parsing directly
-    args = shlex.split("alliance_menu -v")
-    verbose = "-v" in args
-    args = [a for a in args if a != "-v"]
-    assert verbose is True
-    assert args == ["alliance_menu"]
+    traces: list[object] = []
+
+    class FakeSession:
+        def refresh(self) -> None:
+            pass
+
+    class FakeGW:
+        def identify(self, session: object) -> str:
+            return "alliance_menu"
+
+    class FakeNavigator:
+        def __init__(
+            self,
+            gw: FakeGW,
+            locator: object,
+            session: FakeSession,
+            trace: object | None = None,
+        ) -> None:
+            self.gw = gw
+            self.session = session
+            self.trace = trace
+            traces.append(trace)
+
+        def goto(self, target: str) -> str:
+            self.session.refresh()
+            return self.gw.identify(self.session) or target
+
+    monkeypatch.setattr(cli_mod, "Navigator", FakeNavigator)
+
+    cli = cli_mod.CliSession.__new__(cli_mod.CliSession)
+    cli._session = FakeSession()
+    object.__setattr__(cli, "_gw", FakeGW())
+    object.__setattr__(cli, "_locator", object())
+
+    cli.do_go("alliance_menu -v")
+    assert traces[-1] is not None
+    assert callable(traces[-1])
+
+    cli.do_go("alliance_menu")
+    assert traces[-1] is None
