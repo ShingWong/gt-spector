@@ -128,6 +128,11 @@ locations:
   account_title:     {x: 573, y: 145, screens: [account]}
   igg_id_static:     {x: 197, y: 223, screens: [change_account]}
   igg_account_static: {x: 735, y: 262, screens: [change_account]}
+  start_session_expired_static: {x: 638, y: 406, screens: [startup_expired]}
+  start_expire_ok_static: {x: 576, y: 561, screens: [startup_expired]}
+  start_expire_more_static: {x: 651, y: 602, screens: [startup_login]}
+  login_current_static: {x: 323, y: 125, screens: [igg_login]}
+  login_use_another_static: {x: 518, y: 369, screens: [igg_login]}
   system_settings_static: {x: 466, y: 248, screens: [settings]}
   account_static:    {x: 260, y: 417, screens: [settings]}
   map_search:        {x: 38,  y: 623, screens: [world_map, world_map_regional], static: true}
@@ -178,6 +183,12 @@ screens:
   change_account:
     description: change-account dialog. IGG/Google/Facebook login options.
     templates: [igg_id_static]
+  startup_expired:
+    description: startup session-expired dialog with OK button.
+    templates: [start_session_expired_static]
+  igg_login:
+    description: IGG login form (email/password). Identified by login_current_static.
+    templates: [login_current_static]
   account:
     description: account management menu. CHANGE ACCOUNT at 573,660.
     templates: [account_title_static]
@@ -213,6 +224,8 @@ screens:
 
 # Navigation: reachable screens from each screen + recommended action.
 navigation:
+  startup_expired:
+    world_map:          {action: locate, name: start_expire_ok_static}
   settings:
     avatar_menu:        {action: locate, name: exit_static}
     account:            {action: locate, name: account_static}
