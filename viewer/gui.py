@@ -2,8 +2,10 @@ import os
 import time as _time
 import tkinter as tk
 from datetime import UTC
+from functools import partial
 from tkinter import ttk
 
+import numpy as np
 from PIL import Image, ImageTk
 
 from gt_spector import audio, overlay, settings
@@ -23,10 +25,16 @@ class ViewerWindow:
         self._tk.protocol("WM_DELETE_WINDOW", self._on_close)
         self._last_click_time = 0.0
         self._drag_start = None
+        self._drag_pos: tuple[int, int] | None = None
         self._is_dragging = False
         self._handling_release = False
         self._marker_pick_mode = False
         self._skip_release = False
+        self._template_mode = ""
+        self._template_poly: list[tuple[int, int]] = []
+        self._template_overlay_on = False
+        self._last_box: tuple[int, int, int, int] | None = None
+        self._last_template_mode = ""
         self._last_redraw = 0.0
         self._last_frame_sample: bytes | None = None
         self._tk.geometry("1152x914")
@@ -62,6 +70,21 @@ class ViewerWindow:
             label="Clear All Markers", command=self._on_clear_all_markers)
         overlay_menu.add_command(label="List Markers", command=self._on_viewer_list_markers)
         menubar.add_cascade(label="Overlay", menu=overlay_menu)
+
+        template_menu = tk.Menu(menubar, tearoff=0)
+        self._template_mode_var = tk.StringVar(value="")
+        for label, mode in [("Rectangle", "rect"), ("Circle", "circle"), ("Freehand", "freehand")]:
+            template_menu.add_radiobutton(
+                label=label, variable=self._template_mode_var, value=mode,
+                command=partial(self._on_template_mode, mode))
+        template_menu.add_separator()
+        template_menu.add_command(label="Save Template...", command=self._on_save_template)
+        template_menu.add_separator()
+        self._template_overlay_var = tk.BooleanVar(value=False)
+        template_menu.add_checkbutton(
+            label="Show Template Matches", variable=self._template_overlay_var,
+            command=self._on_template_overlay_toggle)
+        menubar.add_cascade(label="Template", menu=template_menu)
 
         nav_menu = tk.Menu(menubar, tearoff=0)
         nav_menu.add_command(label="Move Mouse to...", command=self._on_move_mouse_to)
@@ -116,6 +139,66 @@ class ViewerWindow:
 
     def _on_overlay_toggle(self) -> None:
         overlay.set_overlay_enabled(self._display_num(), self._overlay_var.get())
+
+    def _on_template_mode(self, mode: str) -> None:
+        self._template_mode = mode
+        self._template_poly = []
+        self._status.config(
+            text=f"Template mode: {mode} — drag on the frame to define a region")
+
+    def _on_template_overlay_toggle(self) -> None:
+        self._template_overlay_on = self._template_overlay_var.get()
+        self._status.config(
+            text="Template matches ON" if self._template_overlay_on else "Template matches OFF")
+
+    def _on_save_template(self) -> None:
+        if self._last_box is None:
+            self._status.config(
+                text="Pick a Template mode and drag a region on the frame first")
+            return
+        sx, sy, fx, fy = self._last_box
+        self._save_template_from_box(sx, sy, fx, fy, self._last_template_mode)
+
+    def _save_template_from_box(self, sx: int, sy: int, fx: int, fy: int,
+                                mode: str | None = None) -> None:
+        mode = mode or self._template_mode
+        if not mode:
+            return
+        x0, y0 = min(sx, fx), min(sy, fy)
+        x1, y1 = max(sx, fx), max(sy, fy)
+        if x1 - x0 < 1 or y1 - y0 < 1:
+            self._status.config(text="Template region too small — drag a larger area")
+            return
+        import tkinter.simpledialog as sd
+        name = sd.askstring("Save Template", "Template name:", parent=self._tk)
+        if not name:
+            return
+        self._last_box = (sx, sy, fx, fy)
+        self._last_template_mode = mode
+        from gt_spector import templates as T
+        frame = self._session.frame
+        patch = frame[y0:y1, x0:x1, :3]
+        mask: np.ndarray | None = None
+        if mode == "circle":
+            import cv2
+            mask = np.zeros((patch.shape[0], patch.shape[1]), dtype=np.uint8)
+            cv2.circle(
+                mask, (patch.shape[1] // 2, patch.shape[0] // 2),
+                min(patch.shape[1], patch.shape[0]) // 2, 1, thickness=-1)
+        elif mode == "freehand" and len(self._template_poly) >= 3:
+            import cv2
+            mask = np.zeros((y1 - y0, x1 - x0), dtype=np.uint8)
+            pts = np.array([(px - x0, py - y0) for px, py in self._template_poly],
+                           dtype=np.int32)
+            cv2.fillPoly(mask, [pts], 1)
+        t = T.Template(name=name, shape=mode, x=x0, y=y0,
+                       w=x1 - x0, h=y1 - y0, game_version=T.GAME_VERSION,
+                       score_threshold=0.75)
+        T.save_template(t, patch, mask)
+        self._status.config(text=f"Template '{name}' saved")
+        self._template_poly = []
+        self._template_mode = ""
+        self._template_mode_var.set("")
 
     def _on_set_marker_with_mouse(self) -> None:
         overlay.set_overlay_enabled(self._display_num(), True)
@@ -225,9 +308,11 @@ class ViewerWindow:
                 changed = sample != getattr(self, "_last_frame_sample", None)
                 if changed:
                     self._last_frame_sample = sample
-            if changed and (now - self._last_redraw) >= 0.066:
+            dragging_selection = self._template_mode and self._drag_start is not None
+            if (changed or dragging_selection) and (now - self._last_redraw) >= 0.066:
                 self._last_redraw = now
                 frame = overlay.draw_markers(frame, self._display_num())
+                frame = self._draw_template_overlay(frame)
                 self._tk.update_idletasks()
                 fw = max(self._frame.winfo_width(), 50)
                 fh = max(self._frame.winfo_height(), 50)
@@ -252,6 +337,45 @@ class ViewerWindow:
             self._status.config(text=f"Error: {e}")
         delay = max(50, int(1000 / self._session.fps))
         self._tk.after(delay, self._poll)
+
+    def _draw_template_overlay(self, frame: np.ndarray) -> np.ndarray:
+        """Draw live template-match boxes and the in-progress selection preview."""
+        preview = self._template_mode and self._drag_start is not None
+        if not self._template_overlay_on and not preview:
+            return frame
+        import cv2
+        frame = frame.copy()
+        if self._template_overlay_on:
+            from gt_spector import templates as T
+            from gt_spector.locator import Locator
+            loc = getattr(self, "_locator", None)
+            if loc is None:
+                loc = Locator()
+                self._locator = loc
+            for t in T.load_templates():
+                r = loc.find(frame, t.name)
+                if r.found:
+                    x0 = r.cx - t.w // 2
+                    y0 = r.cy - t.h // 2
+                    cv2.rectangle(frame, (x0, y0), (x0 + t.w, y0 + t.h), (255, 0, 255), 1)
+        if preview:
+            start = self._drag_start
+            end = self._drag_pos
+            if start is not None and end is not None:
+                sx, sy = start
+                fx, fy = end
+                x0, y0 = min(sx, fx), min(sy, fy)
+                x1, y1 = max(sx, fx), max(sy, fy)
+                color = (0, 255, 255)
+                if self._template_mode == "circle" and x1 - x0 > 0 and y1 - y0 > 0:
+                    cv2.ellipse(frame, ((x0 + x1) // 2, (y0 + y1) // 2),
+                                ((x1 - x0) // 2, (y1 - y0) // 2), 0, 0, 360, color, 1)
+                elif self._template_mode == "freehand" and len(self._template_poly) >= 2:
+                    pts = np.array(self._template_poly, dtype=np.int32)
+                    cv2.polylines(frame, [pts], False, color, 1)
+                elif self._template_mode != "freehand":
+                    cv2.rectangle(frame, (x0, y0), (x1, y1), color, 1)
+        return frame
 
     def _on_fps_change(self):
         try:
@@ -290,6 +414,12 @@ class ViewerWindow:
             return
         self._drag_start = (fx, fy)
         self._is_dragging = False
+        if self._template_mode:
+            self._drag_pos = (fx, fy)
+            if self._template_mode == "freehand":
+                self._template_poly = [(fx, fy)]
+            self._status.config(text=f"Template mode: {self._template_mode} — drag to define region")
+            return
         self._session.move_mouse(fx, fy)
         self._session.mouse_down()
 
@@ -299,6 +429,11 @@ class ViewerWindow:
         self._is_dragging = True
         fx = int(event.x / self._scale)
         fy = int(event.y / self._scale)
+        if self._template_mode:
+            self._drag_pos = (fx, fy)
+            if self._template_mode == "freehand":
+                self._template_poly.append((fx, fy))
+            return
         self._session.move_mouse(fx, fy)
 
     def _on_canvas_release(self, event):
@@ -320,6 +455,9 @@ class ViewerWindow:
             was_drag = self._is_dragging
             self._is_dragging = False
             self._drag_start = None
+            if self._template_mode:
+                self._save_template_from_box(sx, sy, fx, fy)
+                return
             if was_drag:
                 self._session.mouse_up()
                 self._status.config(text=f"Drag: ({sx},{sy}) -> ({fx},{fy})")
