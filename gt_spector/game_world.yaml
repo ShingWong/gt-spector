@@ -165,6 +165,9 @@ locations:
   login_select_igg_id_static: {x: 621, y: 34, screens: [select_igg_id]}
   login_igg_id:    {x: 373, y: 161, screens: [select_igg_id]}
   system_settings_static: {x: 466, y: 248, screens: [settings]}
+  system_settings_title_static: {x: 546, y: 143, screens: [system_settings]}
+  system_settings_exit_static: {x: 1007, y: 143, screens: [system_settings]}
+  system_settings_graphics_quality_display: {x: 897, y: 248, screens: [system_settings]}
   account_static:    {x: 260, y: 417, screens: [settings]}
   map_search:        {x: 38,  y: 623, screens: [world_map, world_map_regional], static: true}
   chat:              {x: 139, y: 810, screens: [world_map, world_map_regional]}
@@ -256,7 +259,8 @@ screens:
     templates: [account_title_static]
   system_settings:
     description: system settings - graphics quality, frame rate, resolution, sound.
-    templates: []
+      Content is SCROLLABLE vertically. Scroll by placing the mouse at (600,400).
+    templates: [system_settings_title_static]
   exit_dialog:
     description: '"Exit game?" confirmation with CANCEL / OK'
     fingerprint: []
@@ -296,6 +300,8 @@ navigation:
     avatar_menu:        {action: locate, name: exit_static}
     account:            {action: locate, name: account_static}
     system_settings:    {action: locate, name: system_settings_static}
+  system_settings:
+    settings:           {action: locate, name: system_settings_exit_static}
   account:
     settings:           {action: locate, name: account_exit_static}
     change_account:     {action: locate, name: change_account_static}
