@@ -3,7 +3,7 @@
 Checks pixel at (525, 680) against target color (0xDEA342).
 If match, clicks at (527, 682) via xdotool --window.
 """
-import time
+from gt_spector.locator import Locator
 
 HELP2_X = 525
 HELP2_Y = 680
@@ -11,6 +11,9 @@ HELP2_COLOR = 0xDEA342
 VARIANCE = 0.20
 CLICK_X = 527
 CLICK_Y = 682
+
+_locator: Locator | None = None
+HELP_TEMPLATE = "help_btn"
 
 
 def color_match(c1: int, c2: int, variance: float = 0.20) -> bool:
@@ -21,7 +24,15 @@ def color_match(c1: int, c2: int, variance: float = 0.20) -> bool:
 
 
 def run(session, bot):
-    """One iteration: check pixel, click if match. Returns True if clicked."""
+    """One iteration: locate help button, click if found. Returns True if clicked."""
+    if _locator is not None:
+        try:
+            res = _locator.find(session.frame, HELP_TEMPLATE)
+            if res.found:
+                session.click(res.cx, res.cy)
+                return True
+        except Exception:
+            pass
     try:
         r, g, b = session.get_pixel(HELP2_X, HELP2_Y)
         pixel_color = (r << 16) | (g << 8) | b
