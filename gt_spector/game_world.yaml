@@ -124,8 +124,8 @@ locations:
   stamina_value:     {x: 992, y: 275, screens: [avatar_menu]}
   stamina_add:       {x: 1119, y: 275, screens: [avatar_menu]}
   settings_account:  {x: 218, y: 510, screens: [settings]}
-  change_account:    {x: 512, y: 765, screens: [account]}
-  account_title:     {x: 442, y: 167, screens: [account]}
+  change_account:    {x: 573, y: 660, screens: [account]}
+  account_title:     {x: 573, y: 145, screens: [account]}
   system_settings_static: {x: 466, y: 248, screens: [settings]}
   account_static:    {x: 260, y: 417, screens: [settings]}
   map_search:        {x: 38,  y: 623, screens: [world_map, world_map_regional], static: true}
@@ -174,8 +174,8 @@ screens:
     description: settings menu. Account option at 218,510 (login/account switching).
     templates: [settings_title_static]
   account:
-    description: account management menu. CHANGE ACCOUNT button at 512,765.
-    templates: []
+    description: account management menu. CHANGE ACCOUNT at 573,660.
+    templates: [account_title_static]
   system_settings:
     description: system settings - graphics quality, frame rate, resolution, sound.
     templates: []
@@ -213,7 +213,7 @@ navigation:
     account:            {action: locate, name: account_static}
     system_settings:    {action: locate, name: system_settings_static}
   account:
-    settings:           {action: locate, name: exit_static}
+    settings:           {action: locate, name: account_exit_static}
   avatar_menu:
     world_map:          {action: locate, name: back_static}
     settings:           {action: locate, name: settings_static}

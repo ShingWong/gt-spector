@@ -438,5 +438,16 @@
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
     "reader": "vlm"
+  },
+  {
+    "name": "change_account_static",
+    "shape": "rect",
+    "x": 538,
+    "y": 646,
+    "w": 70,
+    "h": 29,
+    "game_version": "Doomsday_1.59.0",
+    "score_threshold": 0.75,
+    "reader": "vlm"
   }
 ]
