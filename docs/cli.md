@@ -59,3 +59,27 @@ arrived at alliance_menu
 > where
 alliance_menu
 ```
+
+## In-Game Settings (initialization)
+
+Set game options in one shot during initialization (or after a Wine-prefix
+rebuild). This auto-navigates to the system settings menu, applies each
+setting, and exits:
+
+```
+python -m gt_spector --session :<display> --in-game-settings "graphics-quality=low"
+```
+
+Multiple settings are comma-separated:
+
+```
+python -m gt_spector --session :<display> --in-game-settings "graphics-quality=low,frame-rate=low"
+```
+
+Valid keys and values:
+- `graphics-quality=low|high`
+- `frame-rate=low|mid|high`
+
+Settings are applied via deterministic pixel-color detection (no VLM). New
+settings are added to the `IN_GAME_SETTINGS` registry in `viewer/cli.py`.
+Unknown keys or invalid values exit with an error listing the valid options.

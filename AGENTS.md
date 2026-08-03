@@ -59,6 +59,10 @@ Core commands: `where`, `go <screen> [-v]`, `route <screen>`,
 `-v` on `go` prints each hop as it moves. Navigation is template-based
 (no VLM).
 
+For one-shot initialization of game options (or after Wine-prefix rebuilds):
+`python -m gt_spector --session :<display> --in-game-settings "graphics-quality=low"`
+(see `docs/cli.md` "In-Game Settings").
+
 ## Code Style
 
 - Python: ruff + mypy strict
