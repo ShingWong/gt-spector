@@ -31,23 +31,66 @@ CLICK_POINTS = {
     "alliance_flags": (485, 21),
     "mission_menu": (40, 680),
     "radar_station": (103, 616),
-    "alliance_menu": (960, 800),
-    "hero_menu": (1040, 800),
-    "bag_menu": (975, 800),
+    "alliance_menu": (968, 796),
+    "hero_menu": (1038, 796),
+    "bag_menu": (999, 798),
     "campaign_menu": (800, 800),
 }
 
-PATCH_HALF = 24  # 48x48 capture box
-MIN_STD = 25.0
+PATCH_HALF = 24  # fallback 48x48 capture box when tight-boxing fails
+MIN_STD = 15.0
+TIGHT_SEARCH = 12  # content-aware box search radius
+
+
+def _mask(frame: np.ndarray) -> np.ndarray:
+    """Binary mask of button-like pixels: bright or strongly saturated."""
+    rgb = frame[:, :, :3].astype(np.uint8)
+    gray = rgb.mean(axis=2)
+    sat = rgb.max(axis=2).astype(int) - rgb.min(axis=2).astype(int)
+    return ((gray > 90) | (sat > 40)).astype(np.uint8)
+
+
+def tight_box(frame: np.ndarray, cx: int, cy: int,
+              search: int = TIGHT_SEARCH) -> tuple[int, int, int, int] | None:
+    """Tight bounding box of the button containing (cx, cy).
+
+    Uses connected components on a button-mask within a small search window so
+    adjacent toolbar buttons do not merge. Returns (x0, y0, x1, y1).
+    """
+    import cv2
+
+    h, w = frame.shape[:2]
+    x0, x1 = max(0, cx - search), min(w, cx + search)
+    y0, y1 = max(0, cy - search), min(h, cy + search)
+    mask = _mask(frame)[y0:y1, x0:x1]
+    n, labels, stats, cents = cv2.connectedComponentsWithStats(mask, 8)
+    rx, ry = cx - x0, cy - y0
+    lab = labels[ry, rx]
+    if lab <= 0:
+        best, bd = None, 1e9
+        for i in range(1, n):
+            c = cents[i]
+            d = (c[0] - rx) ** 2 + (c[1] - ry) ** 2
+            if d < bd:
+                bd, best = d, i
+        lab = best
+    if lab is None or lab <= 0:
+        return None
+    st = stats[lab]
+    return (x0 + int(st[0]), y0 + int(st[1]),
+            x0 + int(st[0]) + int(st[2]), y0 + int(st[1]) + int(st[3]))
 
 
 def acquire(frame: np.ndarray, name: str, cx: int, cy: int,
             locator=None) -> T.Template | None:
     h, w = frame.shape[:2]
-    x0, x1 = max(0, cx - PATCH_HALF), min(w, cx + PATCH_HALF)
-    y0, y1 = max(0, cy - PATCH_HALF), min(h, cy + PATCH_HALF)
+    box = tight_box(frame, cx, cy)
+    if box is None:
+        box = (max(0, cx - PATCH_HALF), max(0, cy - PATCH_HALF),
+               min(w, cx + PATCH_HALF), min(h, cy + PATCH_HALF))
+    x0, y0, x1, y1 = box
     patch = frame[y0:y1, x0:x1]
-    if patch.shape[0] < 10 or patch.shape[1] < 10:
+    if patch.shape[0] < 4 or patch.shape[1] < 4:
         print(f"  SKIP {name}: patch too small {patch.shape}")
         return None
     if patch.std() < MIN_STD:
@@ -59,9 +102,9 @@ def acquire(frame: np.ndarray, name: str, cx: int, cy: int,
     if locator is not None:
         r = locator.find(frame, name)
         status = f"locatable score={r.score:.3f} @({r.cx},{r.cy})" if r.found else "NOT locatable"
-        print(f"  SAVED {name:16s} ({cx:4d},{cy:4d}) patch={patch.shape} {status}")
+        print(f"  SAVED {name:16s} ({cx:4d},{cy:4d}) box=({x0},{y0})-({x1},{y1}) {status}")
     else:
-        print(f"  SAVED {name:16s} ({cx:4d},{cy:4d}) patch={patch.shape}")
+        print(f"  SAVED {name:16s} ({cx:4d},{cy:4d}) box=({x0},{y0})-({x1},{y1})")
     return t
 
 

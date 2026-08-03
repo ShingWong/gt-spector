@@ -72,6 +72,9 @@ class Marker:
     b: int = 0
     label: str = ""
     visible: bool = True
+    shape: str = "cross"
+    w: int = 0
+    h: int = 0
 
 
 def _markers_path(display: int) -> Path:
@@ -96,12 +99,14 @@ def save_markers(display: int, markers: list[Marker]) -> None:
 
 
 def add_marker(display: int, x: int, y: int, label: str = "",
-               r: int = 0, g: int = 255, b: int = 0) -> Marker:
+               r: int = 0, g: int = 255, b: int = 0,
+               shape: str = "cross", w: int = 0, h: int = 0) -> Marker:
     markers = load_markers(display)
     mid = label if label else f"m{x}_{y}"
     # Remove existing with same id
     markers = [m for m in markers if m.id != mid]
-    m = Marker(id=mid, x=x, y=y, r=r, g=g, b=b, label=label)
+    m = Marker(id=mid, x=x, y=y, r=r, g=g, b=b, label=label,
+               shape=shape, w=w, h=h)
     markers.append(m)
     save_markers(display, markers)
     return m
@@ -137,6 +142,30 @@ def draw_markers(frame: np.ndarray, display: int) -> np.ndarray:
         cx, cy = m.x, m.y
         color = (int(m.r), int(m.g), int(m.b))
         dark = (int(m.r) // 4, int(m.g) // 4, int(m.b) // 4)
+
+        if m.shape == "box":
+            # Thin box outline around a region (template confirmation).
+            # No wide label background, so clustered boxes do not overlap.
+            bx0, by0 = cx, cy
+            bx1, by1 = cx + m.w, cy + m.h
+            bx0, bx1 = max(0, bx0), min(w, bx1)
+            by0, by1 = max(0, by0), min(h, by1)
+            for x in range(bx0, bx1):
+                if 0 <= by0 < h:
+                    result[by0, x] = color
+                if 0 <= by1 - 1 < h:
+                    result[by1 - 1, x] = color
+            for y in range(by0, by1):
+                if 0 <= bx0 < w:
+                    result[y, bx0] = color
+                if 0 <= bx1 - 1 < w:
+                    result[y, bx1 - 1] = color
+            if m.label:
+                for off, ch in enumerate(m.label):
+                    px = bx0 + 2 + off * 7
+                    if px < w and by0 - 10 >= 0:
+                        result[by0 - 10, px] = color
+            continue
 
         lw = len(m.label) * 7 + 4 if m.label else 0
         x0, x1 = max(0, cx - 14), min(w, cx + 14 + lw + 1)
