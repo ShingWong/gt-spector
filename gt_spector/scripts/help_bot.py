@@ -104,10 +104,15 @@ class HelpBot:
     def _navigate_to_help_dialog(self) -> None:
         self._session.refresh()
         screen = self._gw.identify(self._session)
+        if screen == "help_dialog":
+            self._status = "navigated"
+            return
+
         if screen is None:
             self._status = "unknown_screen"
             return
 
+        # Reach the alliance menu, then open the help dialog.
         if screen != "alliance_menu":
             if not self._gw.navigate(self._session, "alliance_menu"):
                 self._status = "nav_failed"
