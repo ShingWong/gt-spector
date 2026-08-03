@@ -45,9 +45,9 @@ class FakeSession:
             self.esc_count += 1
 
 
-def _nav(gw, session):
+def _nav(gw, session, trace=None):
     from gt_spector.navigator import Navigator
-    return Navigator(gw, None, session)
+    return Navigator(gw, None, session, trace=trace)
 
 
 def test_route_to_finds_bfs_path():
@@ -217,3 +217,18 @@ def test_goto_already_at_target():
     n = _nav(gw, s)
     assert n.goto("b") == "b"
     assert s.esc_count == 0
+
+
+def test_goto_trace_reports_hops(monkeypatch):
+    # reuse FakeGW/FakeSession/_nav from the existing file
+    from gt_spector import navigator as navmod
+    monkeypatch.setattr(navmod, "MIN_SETTLE", 0.0)
+    monkeypatch.setattr(navmod, "MAX_SETTLE_TRIES", 2)
+    monkeypatch.setattr(navmod, "MAX_ESC", 1)
+    gw = FakeGW({"a": "a", "b": "b"})
+    s = FakeSession("a")
+    msgs = []
+    n = _nav(gw, s, trace=msgs.append)
+    n.goto("b")
+    assert msgs, "expected at least one trace message"
+    assert any("hop" in m.lower() for m in msgs)

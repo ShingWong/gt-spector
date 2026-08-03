@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 from collections import deque
+from collections.abc import Callable
 from typing import Any
 
 MIN_SETTLE = 0.15
@@ -10,10 +11,15 @@ MAX_ESC = 3
 
 
 class Navigator:
-    def __init__(self, gw: Any, locator: Any, session: Any) -> None:
+    def __init__(self, gw: Any, locator: Any, session: Any,
+                 trace: Callable[[str], None] | None = None) -> None:
         self._gw = gw
         self._locator = locator
         self._session = session
+        self._trace = trace or (lambda msg: None)
+
+    def _report(self, msg: str) -> None:
+        self._trace(msg)
 
     def route_to(self, target: str, screen: str | None = None) -> list[str] | None:
         """BFS path from `screen` (default: identify) to `target`. No movement."""
@@ -91,21 +97,26 @@ class Navigator:
                 return target
 
             for nxt in path[1:]:
+                prev = current
+                self._report(f"hop {prev} -> {nxt}")
                 ok = self._gw._resolve_hop(self._session, current, nxt)
                 if not ok:
                     return current
                 landed = self._settle(current)
+                self._report(f"landed: {landed}")
                 if landed == nxt:
                     current = nxt
                 elif landed is not None and landed != current:
                     # Different known screen: recompute route from here.
                     current = landed
+                    self._report(f"recompute route from {current}")
                     break
                 else:
                     # Screen didn't change or is unknown: ESC + recompute.
                     recovered = self._recover_esc()
                     if recovered is None:
                         return current
+                    self._report(f"ESC recovery: -> {recovered}")
                     current = recovered
                     break
             if self._gw.identify(self._session) == target:
