@@ -14,6 +14,11 @@
 # - mission_menu_count: the completed-mission count badge (red background).
 #   Not needed yet, but in the future it can be read to auto-collect rewards
 #   for completed missions.
+#
+# Chat note (2026-08-02):
+# - chat_static: the invariant part of the chat button, used to identify it.
+# - chat_unread: a red-background @ badge that appears when there are unread
+#   messages. Not needed yet; in the future it can alert on unread chat.
 
 version: 1
 
@@ -31,7 +36,7 @@ locations:
   avatar:            {x: 49,  y: 39,  screens: [world_map, world_map_regional]}
   shelter:           {x: 65,  y: 800, screens: [world_map, world_map_regional], static: true}
   map_search:        {x: 38,  y: 623, screens: [world_map, world_map_regional], static: true}
-  chat:              {x: 150, y: 800, screens: [world_map, world_map_regional]}
+  chat:              {x: 139, y: 810, screens: [world_map, world_map_regional]}
   vip_menu:          {x: 113, y: 56,  screens: [world_map, world_map_regional]}
   region_overview:   {x: 1120, y: 800, screens: [world_map, world_map_regional]}
   messages:          {x: 1120, y: 745, screens: [world_map, world_map_regional]}

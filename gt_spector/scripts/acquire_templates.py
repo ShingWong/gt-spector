@@ -27,7 +27,6 @@ STATIC_LOCATIONS = {
 # Locations that need a template search (dynamic / drift / non-fixed):
 CLICK_POINTS = {
     "avatar": (49, 39),
-    "chat": (150, 800),
     "vip_menu": (113, 56),
     "region_overview": (1120, 800),
     "messages": (1120, 745),
@@ -42,9 +41,13 @@ CLICK_POINTS = {
 # Templates to capture in addition to CLICK_POINTS, keyed by capture center.
 # mission_menu_static identifies the mission menu (invariant chrome);
 # mission_menu_count reads the completed-mission badge (future reward auto-collect).
+# chat_static identifies the chat button (invariant); chat_unread is the
+# red-background @ badge indicating unread messages (future: alert on unread).
 EXTRA_TEMPLATES = {
     "mission_menu_static": (34, 698),
     "mission_menu_count": (55, 671),
+    "chat_static": (139, 810),
+    "chat_unread": (160, 792),
 }
 
 PATCH_HALF = 24  # fallback 48x48 capture box when tight-boxing fails
