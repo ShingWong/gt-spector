@@ -8,6 +8,12 @@
 #   (picture inside changes, border is invariant).
 # - drifts: world-scoped, may move with the camera but tracked for reference.
 #
+# Template scoring note (2026-08-02):
+# The shelter view and world map can have slightly different backgrounds. The
+# same template (e.g. avatar border) scores ~1.0 on one view and ~0.98 on the
+# other. This is expected - normalized correlation is robust but not free of
+# background influence. Default score_threshold (0.75) leaves a safe margin.
+#
 # Mission menu note (2026-08-02):
 # - mission_menu_static: the invariant part of the mission button, used to
 #   identify the mission menu reliably.
@@ -43,8 +49,7 @@
 # red-background shape (which is constant) for presence detection, and use the
 # VLM reader to read the digit when the value is needed.
 #
-# Map alliance help (2026-08-02):
-# - map_alliance_help: an alliance help button on the world map. Can be
+# Map alliance help (2026-08-02):# - map_alliance_help: an alliance help button on the world map. Can be
 #   MISSING when no help is requested; if present, an alliance member has
 #   requested help. Same mechanic as "help" inside the alliance menu (to be
 #   mapped later). This is the button the Help bot targets.
@@ -68,8 +73,9 @@ locations:
   login_failed_more: {x: 558, y: 767, screens: [login_failed_dialog]}
   afk_ok:            {x: 741, y: 676, screens: [afk_popup]}
   glory_league_go:   {x: 575, y: 654, screens: [glory_league_event]}
-  avatar:            {x: 49,  y: 39,  screens: [world_map, world_map_regional]}
+  avatar:            {x: 49,  y: 39,  screens: [world_map, world_map_regional, shelter_view]}
   shelter:           {x: 65,  y: 800, screens: [world_map, world_map_regional], static: true}
+  region_static:     {x: 59,  y: 792, screens: [shelter_view]}
   map_search:        {x: 38,  y: 623, screens: [world_map, world_map_regional], static: true}
   chat:              {x: 139, y: 810, screens: [world_map, world_map_regional]}
   vip_menu:          {x: 113, y: 56,  screens: [world_map, world_map_regional]}
@@ -106,6 +112,9 @@ map_levels:
 
 # Screens with stable anchor fingerprints (captured live, refined over time).
 screens:
+  shelter_view:
+    description: shelter/base view. Identified by avatar border + region_static icon.
+    templates: [avatar, region_static]
   exit_dialog:
     description: '"Exit game?" confirmation with CANCEL / OK'
     fingerprint: []
@@ -126,9 +135,7 @@ screens:
       - [550, 820, 0, 60, 0, 60, 0, 60]  # dim dialog panel bottom
   world_map:
     description: world map, zoomed in (no minimap)
-    fingerprint:
-      - [15, 9, 110, 180, 90, 160, 60, 130]   # avatar border top-left corner (static)
-      - [15, 68, 90, 160, 80, 150, 70, 130]   # avatar border bottom-left (static)
+    templates: [avatar]
   world_map_regional:
     description: regional map, minimap top-right
     fingerprint:
@@ -137,6 +144,8 @@ screens:
 
 # Navigation: reachable screens from each screen + recommended action.
 navigation:
+  shelter_view:
+    world_map:          {action: locate, name: region_static}
   exit_dialog:
     shelter:            {action: click, location: exit_cancel}
     world_map:          {action: click, location: exit_cancel}

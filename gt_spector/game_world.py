@@ -59,14 +59,31 @@ class GameWorld:
 
     # ── Identification ──────────────────────────────────────────────────────
     def identify(self, session: Any) -> str | None:
-        """Return the screen name whose fingerprint fully matches, else None."""
+        """Return the screen name whose fingerprint/templates match, else None.
+
+        A screen matches when ALL its template locators find (score >= their
+        threshold), OR all its pixel-fingerprint probes match. Template-based
+        detection is preferred (robust to brightness/overlay changes); pixel
+        probes are the fallback.
+        """
         for name, spec in self.screens.items():
+            if spec.get("templates"):
+                if self._locator is not None and self._templates_match(session, spec["templates"]):
+                    return name
+                continue
             fp = spec.get("fingerprint")
             if not fp:
                 continue
             if self._matches(session, fp):
                 return name
         return None
+
+    def _templates_match(self, session: Any, templates: list[str]) -> bool:
+        for tname in templates:
+            r = self._locator.find(session.frame, tname)
+            if not r.found:
+                return False
+        return True
 
     def _matches(self, session: Any, fingerprint: list[list[int]]) -> bool:
         try:

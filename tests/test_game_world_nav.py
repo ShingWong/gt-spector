@@ -101,3 +101,28 @@ def test_navigate_stops_on_failed_hop(cfg, monkeypatch):
     s = FakeSession()
     assert gw.navigate(s, "C", screen="A") is False
     assert s.clicks == []
+
+
+def test_identify_via_templates(cfg):
+    from gt_spector.game_world import GameWorld
+    from gt_spector.locator import LocateResult
+
+    class FakeLocator:
+        def __init__(self, results):
+            self.results = results
+        def find(self, frame, name):
+            return self.results.get(name, LocateResult(0, 0, 0.1, False))
+
+    gw = GameWorld()
+    gw.screens["test_screen"] = {"templates": ["alpha", "beta"]}
+    gw.set_locator(FakeLocator({
+        "alpha": LocateResult(1, 1, 0.9, True),
+        "beta": LocateResult(2, 2, 0.8, True),
+    }))
+    sess = type("S", (), {"frame": np.zeros((8, 8, 3), dtype=np.uint8)})()
+    assert gw.identify(sess) == "test_screen"
+
+    gw2 = GameWorld()
+    gw2.screens["test_screen"] = {"templates": ["alpha", "beta"]}
+    gw2.set_locator(FakeLocator({"alpha": LocateResult(1, 1, 0.9, True)}))
+    assert gw2.identify(sess) is None
