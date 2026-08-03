@@ -54,6 +54,6 @@ def run(session, bot):
         if color_match(pixel_color, HELP_COLOR, VARIANCE):
             session.click(CLICK_X, CLICK_Y)
             return True
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001, S110
         pass
     return False
