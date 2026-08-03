@@ -23,6 +23,15 @@
 # ESC always takes you back one menu level. This is a reliable universal
 # "back" action for any screen that has a visible close/back button too.
 #
+# Settings menu note (2026-08-02):
+# The settings menu content is SCROLLABLE vertically - do NOT assume the menu
+# icons are at fixed positions; locate them via templates each time.
+# - system_settings_static: opens system settings (graphics quality, frame
+#   rate, screen resolution, sound). Use to set graphics/frame-rate low and
+#   disable sound on bots.
+# - account_static: opens the account menu where accounts can be linked,
+#   unlinked, and switched. This is the path for changing a bot's account.
+#
 # Template scoring note (2026-08-02):
 # The shelter view and world map can have slightly different backgrounds. The
 # same template (e.g. avatar border) scores ~1.0 on one view and ~0.98 on the
@@ -115,6 +124,10 @@ locations:
   stamina_value:     {x: 992, y: 275, screens: [avatar_menu]}
   stamina_add:       {x: 1119, y: 275, screens: [avatar_menu]}
   settings_account:  {x: 218, y: 510, screens: [settings]}
+  change_account:    {x: 512, y: 765, screens: [account]}
+  account_title:     {x: 442, y: 167, screens: [account]}
+  system_settings_static: {x: 466, y: 248, screens: [settings]}
+  account_static:    {x: 260, y: 417, screens: [settings]}
   map_search:        {x: 38,  y: 623, screens: [world_map, world_map_regional], static: true}
   chat:              {x: 139, y: 810, screens: [world_map, world_map_regional]}
   vip_menu:          {x: 113, y: 56,  screens: [world_map, world_map_regional]}
@@ -160,6 +173,12 @@ screens:
   settings:
     description: settings menu. Account option at 218,510 (login/account switching).
     templates: [settings_title_static]
+  account:
+    description: account management menu. CHANGE ACCOUNT button at 512,765.
+    templates: []
+  system_settings:
+    description: system settings - graphics quality, frame rate, resolution, sound.
+    templates: []
   exit_dialog:
     description: '"Exit game?" confirmation with CANCEL / OK'
     fingerprint: []
@@ -191,6 +210,10 @@ screens:
 navigation:
   settings:
     avatar_menu:        {action: locate, name: exit_static}
+    account:            {action: locate, name: account_static}
+    system_settings:    {action: locate, name: system_settings_static}
+  account:
+    settings:           {action: locate, name: exit_static}
   avatar_menu:
     world_map:          {action: locate, name: back_static}
     settings:           {action: locate, name: settings_static}

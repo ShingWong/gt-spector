@@ -394,5 +394,49 @@
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
     "reader": "vlm"
+  },
+  {
+    "name": "system_settings_static",
+    "shape": "rect",
+    "x": 434,
+    "y": 231,
+    "w": 64,
+    "h": 34,
+    "game_version": "Doomsday_1.59.0",
+    "score_threshold": 0.75,
+    "reader": "vlm"
+  },
+  {
+    "name": "account_static",
+    "shape": "rect",
+    "x": 238,
+    "y": 404,
+    "w": 44,
+    "h": 26,
+    "game_version": "Doomsday_1.59.0",
+    "score_threshold": 0.75,
+    "reader": "vlm"
+  },
+  {
+    "name": "account_title_static",
+    "shape": "rect",
+    "x": 517,
+    "y": 133,
+    "w": 112,
+    "h": 24,
+    "game_version": "Doomsday_1.59.0",
+    "score_threshold": 0.75,
+    "reader": "vlm"
+  },
+  {
+    "name": "account_exit_static",
+    "shape": "rect",
+    "x": 991,
+    "y": 133,
+    "w": 32,
+    "h": 20,
+    "game_version": "Doomsday_1.59.0",
+    "score_threshold": 0.75,
+    "reader": "vlm"
   }
 ]

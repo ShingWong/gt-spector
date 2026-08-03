@@ -63,6 +63,8 @@ EXTRA_TEMPLATES = {
     "settings_static": (159, 789),
     "settings_title_static": (571, 143),
     "exit_static": (1005, 144),
+    "system_settings_static": (466, 248),
+    "account_static": (260, 417),
     "likes_static": (261, 790),
     "more_static": (361, 789),
     "stamina_value": (992, 275),
