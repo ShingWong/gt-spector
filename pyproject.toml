@@ -9,6 +9,7 @@ description = "Game testing inspector"
 requires-python = ">=3.11"
 dependencies = [
     "numpy",
+    "opencv-python-headless",
     "Pillow",
     "requests",
 ]
