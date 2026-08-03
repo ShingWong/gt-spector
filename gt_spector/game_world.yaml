@@ -35,11 +35,25 @@
 #   identify it.
 # - messages_count: badge on the messages button. Not needed yet.
 #
+# Count badges (IMPORTANT, 2026-08-02):
+# The *_count templates (mission_menu_count, chat_unread, alliance_menu_count,
+# messages_count, bag_count, hero_count) will NEVER match exactly because the
+# number inside the badge changes. Do not template-match the digit. The
+# reliable signal is the RED BACKGROUND with a number - template the badge's
+# red-background shape (which is constant) for presence detection, and use the
+# VLM reader to read the digit when the value is needed.
+#
 # Map alliance help (2026-08-02):
 # - map_alliance_help: an alliance help button on the world map. Can be
 #   MISSING when no help is requested; if present, an alliance member has
 #   requested help. Same mechanic as "help" inside the alliance menu (to be
 #   mapped later). This is the button the Help bot targets.
+#
+# Bag / hero note (2026-08-02):
+# - bag: identifies the bag/inventory button (its icon; no separate _static).
+# - bag_count: red badge on the bag. Presence via red background.
+# - hero_static: identifies the hero button (invariant).
+# - hero_count: red badge on the hero button. Presence via red background.
 
 version: 1
 
@@ -66,8 +80,8 @@ locations:
   mission_menu:      {x: 34,  y: 698, screens: [world_map]}
   radar_station:     {x: 103, y: 616, screens: [world_map], drifts: true}
   alliance_menu:     {x: 951, y: 800, screens: [world_map], drifts: true}
-  hero_menu:         {x: 1040, y: 800, screens: [world_map], drifts: true}
-  bag:               {x: 861, y: 782, screens: [world_map], drifts: true}
+  hero_menu:         {x: 1046, y: 802, screens: [world_map], drifts: true}
+  bag:               {x: 875, y: 796, screens: [world_map], drifts: true}
   campaign_menu:     {x: 800, y: 800, screens: [world_map], drifts: true}
 
 # World zones on the regional map: zone_1 outer, zone_2 middle, zone_3 center.
@@ -134,7 +148,7 @@ navigation:
     world_map_regional: {action: zoom_out}
     shelter:            {action: click, location: shelter}
     chat:               {action: click, location: chat}
-    hero_menu:          {action: locate, name: hero_menu}
+    hero_menu:          {action: locate, name: hero_static}
     bag:                {action: locate, name: bag}
     alliance_menu:      {action: locate, name: alliance_menu_static}
     campaign_menu:      {action: locate, name: campaign_menu}

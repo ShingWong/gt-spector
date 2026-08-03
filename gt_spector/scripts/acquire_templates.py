@@ -32,8 +32,7 @@ CLICK_POINTS = {
     "region_search": (439, 15),
     "alliance_flags": (485, 21),
     "radar_station": (103, 616),
-    "hero_menu": (1038, 796),
-    "bag": (861, 782),
+    "bag": (875, 796),
     "campaign_menu": (800, 800),
 }
 # Templates to capture in addition to CLICK_POINTS, keyed by capture center.
@@ -57,6 +56,9 @@ EXTRA_TEMPLATES = {
     "messages_static": (1113, 751),
     "messages_count": (1126, 727),
     "map_alliance_help": (1114, 693),
+    "hero_static": (1046, 802),
+    "hero_count": (1067, 772),
+    "bag_count": (885, 762),
 }
 
 PATCH_HALF = 24  # fallback 48x48 capture box when tight-boxing fails
