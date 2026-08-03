@@ -57,6 +57,8 @@ EXTRA_TEMPLATES = {
     "messages_count": (1126, 727),
     "map_alliance_help": (1114, 693),
     "arms_race_static": (1110, 693),
+    "back_static": (44, 38),
+    "commander_static": (141, 40),
     "hero_static": (1046, 802),
     "hero_count": (1067, 772),
     "bag_count": (885, 762),

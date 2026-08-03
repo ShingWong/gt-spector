@@ -90,6 +90,8 @@ locations:
   avatar:            {x: 49,  y: 39,  screens: [world_map, world_map_regional, shelter_view]}
   shelter:           {x: 65,  y: 800, screens: [world_map, world_map_regional], static: true}
   region_static:     {x: 59,  y: 792, screens: [shelter_view]}
+  back_static:       {x: 44,  y: 38,  screens: [avatar_menu]}
+  commander_static:  {x: 141, y: 40,  screens: [avatar_menu]}
   map_search:        {x: 38,  y: 623, screens: [world_map, world_map_regional], static: true}
   chat:              {x: 139, y: 810, screens: [world_map, world_map_regional]}
   vip_menu:          {x: 113, y: 56,  screens: [world_map, world_map_regional]}
@@ -129,6 +131,9 @@ screens:
   shelter_view:
     description: shelter/base view. Identified by avatar border + region_static icon.
     templates: [avatar, region_static]
+  avatar_menu:
+    description: avatar / commander info menu. Identified by back + commander_static.
+    templates: [back_static, commander_static]
   exit_dialog:
     description: '"Exit game?" confirmation with CANCEL / OK'
     fingerprint: []
@@ -158,6 +163,8 @@ screens:
 
 # Navigation: reachable screens from each screen + recommended action.
 navigation:
+  avatar_menu:
+    world_map:          {action: locate, name: back_static}
   shelter_view:
     world_map:          {action: locate, name: region_static}
   exit_dialog:
@@ -168,6 +175,7 @@ navigation:
   login_failed_dialog:
     world_map:          {action: click, location: login_failed_ok}
   world_map:
+    avatar_menu:        {action: locate, name: avatar}
     world_map_regional: {action: zoom_out}
     shelter:            {action: click, location: shelter}
     chat:               {action: click, location: chat}
