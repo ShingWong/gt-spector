@@ -89,15 +89,16 @@ class HelpBot:
             self._stop.wait(POLL_INTERVAL)
 
     def _tick(self) -> None:
-        if self._loop.help_clicks == 0 and self._status != "navigated":
-            # First: get to the help dialog.
+        self._session.refresh()
+        screen = self._gw.identify(self._session)
+        if screen != "help_dialog":
+            # Not in the dialog: navigate to it (re-opens after it closes).
             self._navigate_to_help_dialog()
             return
         result = self._loop.run(self._session)
         if result == "clicked":
             self._status = f"clicked_{self._loop.help_clicks}"
-            # Re-navigate: dialog may close after a click.
-            self._navigate_to_help_dialog()
+            # Dialog may close after a click; re-navigate next tick.
         else:
             self._status = result
 
