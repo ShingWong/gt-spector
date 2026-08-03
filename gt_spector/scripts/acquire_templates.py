@@ -22,23 +22,29 @@ from gt_spector import templates as T
 # STATIC locations (fixed UI, direct click, no template search needed):
 STATIC_LOCATIONS = {
     "shelter": (65, 800),
+    "map_search": (38, 623),
 }
 # Locations that need a template search (dynamic / drift / non-fixed):
 CLICK_POINTS = {
     "avatar": (49, 39),
-    "map_search": (38, 623),
     "chat": (150, 800),
     "vip_menu": (113, 56),
     "region_overview": (1120, 800),
     "messages": (1120, 745),
     "region_search": (439, 15),
     "alliance_flags": (485, 21),
-    "mission_menu": (40, 680),
     "radar_station": (103, 616),
     "alliance_menu": (968, 796),
     "hero_menu": (1038, 796),
     "bag": (861, 782),
     "campaign_menu": (800, 800),
+}
+# Templates to capture in addition to CLICK_POINTS, keyed by capture center.
+# mission_menu_static identifies the mission menu (invariant chrome);
+# mission_menu_count reads the completed-mission badge (future reward auto-collect).
+EXTRA_TEMPLATES = {
+    "mission_menu_static": (34, 698),
+    "mission_menu_count": (55, 671),
 }
 
 PATCH_HALF = 24  # fallback 48x48 capture box when tight-boxing fails
@@ -136,7 +142,8 @@ def main() -> None:
     print(f"store: {store_dir}")
 
     ok, skipped = 0, 0
-    for name, (cx, cy) in CLICK_POINTS.items():
+    all_points = {**CLICK_POINTS, **EXTRA_TEMPLATES}
+    for name, (cx, cy) in all_points.items():
         if acquire(frame, name, cx, cy, locator):
             ok += 1
         else:

@@ -1,6 +1,20 @@
 # Game world knowledge database for Doomsday: Last Survivors.
 # Human-editable. The module gt_spector/game_world.py reads this.
 
+# Component classification:
+# - static: fixed UI, always at the same pixel. Direct click; no template
+#   search. E.g. shelter (65,800), map_search (38,623).
+# - dynamic: non-fixed, located via template search. E.g. avatar border
+#   (picture inside changes, border is invariant).
+# - drifts: world-scoped, may move with the camera but tracked for reference.
+#
+# Mission menu note (2026-08-02):
+# - mission_menu_static: the invariant part of the mission button, used to
+#   identify the mission menu reliably.
+# - mission_menu_count: the completed-mission count badge (red background).
+#   Not needed yet, but in the future it can be read to auto-collect rewards
+#   for completed missions.
+
 version: 1
 
 # Named clickable locations. Each: x, y, and the screens it appears on.
@@ -16,14 +30,14 @@ locations:
   glory_league_go:   {x: 575, y: 654, screens: [glory_league_event]}
   avatar:            {x: 49,  y: 39,  screens: [world_map, world_map_regional]}
   shelter:           {x: 65,  y: 800, screens: [world_map, world_map_regional], static: true}
-  map_search:        {x: 38,  y: 623, screens: [world_map, world_map_regional]}
+  map_search:        {x: 38,  y: 623, screens: [world_map, world_map_regional], static: true}
   chat:              {x: 150, y: 800, screens: [world_map, world_map_regional]}
   vip_menu:          {x: 113, y: 56,  screens: [world_map, world_map_regional]}
   region_overview:   {x: 1120, y: 800, screens: [world_map, world_map_regional]}
   messages:          {x: 1120, y: 745, screens: [world_map, world_map_regional]}
   region_search:     {x: 439, y: 15,  screens: [world_map, world_map_regional]}
   alliance_flags:    {x: 485, y: 21,  screens: [world_map, world_map_regional]}
-  mission_menu:      {x: 40,  y: 680, screens: [world_map]}
+  mission_menu:      {x: 34,  y: 698, screens: [world_map]}
   radar_station:     {x: 103, y: 616, screens: [world_map], drifts: true}
   alliance_menu:     {x: 960, y: 800, screens: [world_map], drifts: true}
   hero_menu:         {x: 1040, y: 800, screens: [world_map], drifts: true}
