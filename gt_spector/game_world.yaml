@@ -41,6 +41,14 @@
 # - account_static: opens the account menu where accounts can be linked,
 #   unlinked, and switched. This is the path for changing a bot's account.
 #
+# Graphics quality setting (2026-08-02) - use PIXEL COLOR, not templates/VLM:
+# On the system settings screen, the quality row has two indicators:
+#   low  indicator at (825,253) - click to set LOW
+#   high indicator at (966,253) - click to set HIGH
+# Detect via the HIGH pixel (966,253): bright (r>=80, ~137,103,69) = HIGH
+# active; dark (r<40, ~19,11,9) = LOW active. Click to toggle; verified
+# round-trip low<->high reliably.
+#
 # Template scoring note (2026-08-02):
 # The shelter view and world map can have slightly different backgrounds. The
 # same template (e.g. avatar border) scores ~1.0 on one view and ~0.98 on the
@@ -167,7 +175,6 @@ locations:
   system_settings_static: {x: 466, y: 248, screens: [settings]}
   system_settings_title_static: {x: 546, y: 143, screens: [system_settings]}
   system_settings_exit_static: {x: 1007, y: 143, screens: [system_settings]}
-  system_settings_graphics_quality_display: {x: 897, y: 248, screens: [system_settings]}
   account_static:    {x: 260, y: 417, screens: [settings]}
   map_search:        {x: 38,  y: 623, screens: [world_map, world_map_regional], static: true}
   chat:              {x: 139, y: 810, screens: [world_map, world_map_regional]}
