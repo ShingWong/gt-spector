@@ -71,3 +71,43 @@ class Navigator:
             if current is not None:
                 return current
         return None
+
+    def goto(self, target: str) -> str | None:
+        """Navigate to `target`. Returns target on success, else the stuck
+        screen or None if no path exists."""
+        current: str | None = self._gw.identify(self._session)
+        if current == target:
+            return target
+        if current is None:
+            current = self._recover_esc()
+            if current is None:
+                return None
+
+        for _ in range(MAX_ESC + 1):
+            path = self.route_to(target, screen=current)
+            if path is None:
+                return None
+            if len(path) == 1:  # already there
+                return target
+
+            for nxt in path[1:]:
+                ok = self._gw._resolve_hop(self._session, current, nxt)
+                if not ok:
+                    return current
+                landed = self._settle(current)
+                if landed == nxt:
+                    current = nxt
+                elif landed is not None and landed != current:
+                    # Different known screen: recompute route from here.
+                    current = landed
+                    break
+                else:
+                    # Screen didn't change or is unknown: ESC + recompute.
+                    recovered = self._recover_esc()
+                    if recovered is None:
+                        return current
+                    current = recovered
+                    break
+            if self._gw.identify(self._session) == target:
+                return target
+        return current

@@ -88,3 +88,81 @@ def test_settle_returns_none_after_max_tries():
     n.MIN_SETTLE = 0.0
     gw.identify = lambda session: "a"  # never changes
     assert n._settle("a") is None
+
+
+def test_goto_success():
+    gw = FakeGW({"a": "a", "b": "b"})
+    s = FakeSession("a")
+    n = _nav(gw, s)
+    n.MIN_SETTLE = 0.0
+    result = n.goto("b")
+    assert result == "b"
+    assert gw.screens[s.name] == "b"
+
+
+def test_goto_recomputes_after_different_landing():
+    gw = FakeGW({"a": "a", "b": "b", "c": "c"})
+    gw.navigation["a"] = {"b": {"action": "click", "location": "b_btn"}}
+    gw.navigation["b"] = {"c": {"action": "click", "location": "c_btn"}}
+    s = FakeSession("a")
+    n = _nav(gw, s)
+    n.MIN_SETTLE = 0.0
+    # The first hop from a -> b always lands on "c" instead.
+    orig_resolve = gw._resolve_hop
+    hop_count = {"n": 0}
+    def resolve(session, screen, target):
+        hop_count["n"] += 1
+        if hop_count["n"] == 1:
+            session.name = "c"
+            return True
+        return orig_resolve(session, screen, target)
+    gw._resolve_hop = resolve
+    result = n.goto("c")
+    assert result == "c"
+    assert gw.screens[s.name] == "c"
+
+
+def test_goto_esc_on_unknown_then_succeed():
+    gw = FakeGW({"a": "a", "b": "b"})
+    s = FakeSession("a")
+    n = _nav(gw, s)
+    n.MIN_SETTLE = 0.0
+    # On first hop, land on unknown (identify returns None). ESC -> b.
+    resolve_called = {"n": 0}
+    orig_resolve = gw._resolve_hop
+    def resolve(session, screen, target):
+        resolve_called["n"] += 1
+        if resolve_called["n"] == 1:
+            session.name = None  # unknown
+            return True
+        return orig_resolve(session, screen, target)
+    gw._resolve_hop = resolve
+    # After ESC, identify should return "b" (recovery); before ESC it is unknown.
+    orig_identify = gw.identify
+    def identify(session):
+        if session.name is None:
+            if session.esc_count == 0:
+                return None
+            return "b"
+        return orig_identify(session)
+    gw.identify = identify
+    result = n.goto("b")
+    assert result == "b"
+    assert s.esc_count >= 1
+
+
+def test_goto_no_path():
+    gw = FakeGW({"a": "a"})
+    s = FakeSession("a")
+    n = _nav(gw, s)
+    n.MIN_SETTLE = 0.0
+    assert n.goto("b") is None
+
+
+def test_goto_already_at_target():
+    gw = FakeGW({"a": "a", "b": "b"})
+    s = FakeSession("b")
+    n = _nav(gw, s)
+    n.MIN_SETTLE = 0.0
+    assert n.goto("b") == "b"
+    assert s.esc_count == 0
