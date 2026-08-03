@@ -8,6 +8,17 @@
 #   (picture inside changes, border is invariant).
 # - drifts: world-scoped, may move with the camera but tracked for reference.
 #
+# Avatar menu note (2026-08-02):
+# Bottom tab bar: ranking_static, settings_static, likes_static, more_static.
+# settings_static opens the settings menu where the account menu lives
+# (needed for login / account switching).
+# Stamina:
+# - stamina_value: the stamina count shown ON TOP of the green stamina bar.
+#   Background is the bar (green) or black depending on bar fill. The value
+#   is important for future bot decisions (e.g. when to refill).
+# - stamina_add: button that opens the stamina dialog where consumables can
+#   be exchanged for stamina.
+#
 # Template scoring note (2026-08-02):
 # The shelter view and world map can have slightly different backgrounds. The
 # same template (e.g. avatar border) scores ~1.0 on one view and ~0.98 on the
@@ -92,6 +103,13 @@ locations:
   region_static:     {x: 59,  y: 792, screens: [shelter_view]}
   back_static:       {x: 44,  y: 38,  screens: [avatar_menu]}
   commander_static:  {x: 141, y: 40,  screens: [avatar_menu]}
+  ranking_static:    {x: 61,  y: 786, screens: [avatar_menu]}
+  settings_static:   {x: 159, y: 789, screens: [avatar_menu]}
+  likes_static:      {x: 261, y: 790, screens: [avatar_menu]}
+  more_static:       {x: 361, y: 789, screens: [avatar_menu]}
+  stamina_value:     {x: 992, y: 275, screens: [avatar_menu]}
+  stamina_add:       {x: 1119, y: 275, screens: [avatar_menu]}
+  settings_account:  {x: 218, y: 510, screens: [settings]}
   map_search:        {x: 38,  y: 623, screens: [world_map, world_map_regional], static: true}
   chat:              {x: 139, y: 810, screens: [world_map, world_map_regional]}
   vip_menu:          {x: 113, y: 56,  screens: [world_map, world_map_regional]}
@@ -134,6 +152,9 @@ screens:
   avatar_menu:
     description: avatar / commander info menu. Identified by back + commander_static.
     templates: [back_static, commander_static]
+  settings:
+    description: settings menu. Account option at 218,510 (login/account switching).
+    templates: []
   exit_dialog:
     description: '"Exit game?" confirmation with CANCEL / OK'
     fingerprint: []
@@ -165,6 +186,7 @@ screens:
 navigation:
   avatar_menu:
     world_map:          {action: locate, name: back_static}
+    settings:           {action: locate, name: settings_static}
   shelter_view:
     world_map:          {action: locate, name: region_static}
   exit_dialog:
