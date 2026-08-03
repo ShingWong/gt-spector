@@ -14,12 +14,12 @@ from __future__ import annotations
 import time
 
 # Per-request help button (gold when a help can be sent, gray after sending).
-HELP_X = 491
-HELP_Y = 685
+HELP_X = 495
+HELP_Y = 682
 HELP_COLOR = 0xE1AB45
 VARIANCE = 0.18
-CLICK_X = 491
-CLICK_Y = 685
+CLICK_X = 495
+CLICK_Y = 682
 
 # After a click, require this many idle seconds with a non-gold pixel before
 # considering the help processed (prevents rapid re-clicks).

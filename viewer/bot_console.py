@@ -135,8 +135,8 @@ class BotConsole:
         menubar.add_cascade(label="Provision", menu=prov_menu)
 
         script_menu = tk.Menu(menubar, tearoff=0)
-        script_menu.add_command(label="Help Bot", command=self._start_help_bot)
-        script_menu.add_command(label="Stop Script", command=self._stop_scripts)
+        script_menu.add_command(label="Start Help Bot", command=self._start_help_bot)
+        script_menu.add_command(label="Stop Help Bot", command=self._stop_help_bots)
         menubar.add_cascade(label="Scripts", menu=script_menu)
 
         overlay_menu = tk.Menu(menubar, tearoff=0)
@@ -185,8 +185,8 @@ class BotConsole:
         ]:
             ttk.Button(toolbar, text=text, command=cmd).pack(side=tk.LEFT, padx=2)
         ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=4)
-        ttk.Button(toolbar, text="Help Bot", command=self._start_help_bot).pack(side=tk.LEFT, padx=2)
-        ttk.Button(toolbar, text="Stop Script", command=self._stop_scripts).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Start Help", command=self._start_help_bot).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Stop Help", command=self._stop_help_bots).pack(side=tk.LEFT, padx=2)
         ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=4)
         ttk.Button(toolbar, text="Clear Status",
                    command=lambda: self._status.config(text="Ready")).pack(side=tk.LEFT, padx=2)
@@ -203,6 +203,7 @@ class BotConsole:
             ("disp", "Disp", 50, tk.E),
             ("status", "Status", 200, tk.W),
             ("activity", "Activity", 140, tk.W),
+            ("help", "Help", 60, tk.E),
             ("loc", "Loc", 100, tk.W),
             ("cr", "CR", 40, tk.E),
             ("iv", "IV", 40, tk.E),
@@ -242,7 +243,7 @@ class BotConsole:
         self._tooltips = {}
         for bot in self._manager.bots:
             self._tree.insert("", tk.END, iid=bot.name,
-                              values=("☐", bot.name, "", "", "", "", "", "", "", "", "", "", "", "[View]"))
+                              values=("☐", bot.name, "", "", "", "", "", "", "", "", "", "", "", "", "[View]"))
         self._update_rows()
 
     def _status_glyph(self, bot: Bot) -> tuple[str, str]:
@@ -293,6 +294,20 @@ class BotConsole:
         loc = monitor.detect_screen(frame, self._nav_table())
         if loc is not None:
             return loc
+        # Fall back to the deterministic game-world identification system.
+        try:
+            from gt_spector.game_world import GameWorld
+            from gt_spector.locator import Locator
+            from gt_spector.session import Session
+
+            gw = GameWorld()
+            gw.set_locator(Locator())
+            session = Session(f":{bot.display}", source=f"shm://{bot.display}")
+            identified = gw.identify(session)
+            if identified:
+                return identified
+        except Exception:  # noqa: BLE001, S110
+            pass
         screens = cast(dict[str, str] | None, getattr(self, "_vlm_screens", None))
         if screens:
             return screens.get(bot.name)
@@ -357,6 +372,9 @@ class BotConsole:
             else:
                 pid = str(bot.pid) if bot.pid else ""
             sel = "☑" if bot.name in set(self._tree.selection()) else "☐"
+            help_count = ""
+            if runner is not None:
+                help_count = str(getattr(runner, "help_clicks", ""))
             self._tree.item(bot.name, tags=(self._status_color(bot),), values=(
                 sel,
                 bot.name,
@@ -364,6 +382,7 @@ class BotConsole:
                 f":{bot.display}",
                 f"{glyph} {status_text}".rstrip(),
                 activity,
+                help_count,
                 loc or "?",
                 str(bot.crash_count),
                 str(bot.intervention_count),
@@ -559,18 +578,22 @@ class BotConsole:
 
     def _start_help_bot(self) -> None:
         for bot in self._get_checked():
-            if bot.name in self._runners:
-                self._runners[bot.name].stop()
-            self._status.config(text=f"Navigating {bot.name} to alliance...")
+            old = self._runners.pop(bot.name, None)
+            if old:
+                old.stop()
+            self._status.config(text=f"Starting help bot on {bot.name}...")
             self._tk.update()
-            ok = HelpBot.navigate_to_alliance(bot.display)
-            if not ok:
-                self._status.config(text=f"Failed to navigate {bot.name}")
-                continue
-            runner = ScriptRunner(bot.display, None, None, None)
-            runner.start(HelpBot())
-            self._runners[bot.name] = runner
+            bot_help = HelpBot()
+            bot_help.start(bot.display)
+            self._runners[bot.name] = bot_help
             self._status.config(text=f"Help bot running on {bot.name}")
+
+    def _stop_help_bots(self) -> None:
+        for bot in self._get_checked():
+            runner = self._runners.pop(bot.name, None)
+            if runner:
+                runner.stop()
+        self._status.config(text="Help bots stopped")
 
     def _stop_scripts(self) -> None:
         for bot in self._get_checked():
