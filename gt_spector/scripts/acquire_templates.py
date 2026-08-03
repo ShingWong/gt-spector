@@ -61,6 +61,8 @@ EXTRA_TEMPLATES = {
     "commander_static": (141, 40),
     "ranking_static": (61, 786),
     "settings_static": (159, 789),
+    "settings_title_static": (571, 143),
+    "exit_static": (1005, 144),
     "likes_static": (261, 790),
     "more_static": (361, 789),
     "stamina_value": (992, 275),

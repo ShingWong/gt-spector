@@ -105,6 +105,7 @@ locations:
   commander_static:  {x: 141, y: 40,  screens: [avatar_menu]}
   ranking_static:    {x: 61,  y: 786, screens: [avatar_menu]}
   settings_static:   {x: 159, y: 789, screens: [avatar_menu]}
+  settings_title_static: {x: 571, y: 143, screens: [settings]}
   likes_static:      {x: 261, y: 790, screens: [avatar_menu]}
   more_static:       {x: 361, y: 789, screens: [avatar_menu]}
   stamina_value:     {x: 992, y: 275, screens: [avatar_menu]}
@@ -154,7 +155,7 @@ screens:
     templates: [back_static, commander_static]
   settings:
     description: settings menu. Account option at 218,510 (login/account switching).
-    templates: []
+    templates: [settings_title_static]
   exit_dialog:
     description: '"Exit game?" confirmation with CANCEL / OK'
     fingerprint: []
@@ -184,6 +185,8 @@ screens:
 
 # Navigation: reachable screens from each screen + recommended action.
 navigation:
+  settings:
+    avatar_menu:        {action: locate, name: exit_static}
   avatar_menu:
     world_map:          {action: locate, name: back_static}
     settings:           {action: locate, name: settings_static}
