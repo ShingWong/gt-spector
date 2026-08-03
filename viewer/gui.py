@@ -597,6 +597,6 @@ class ViewerWindow:
         self._tk.mainloop()
 
 
-def run_gui(session):
+def run_gui(session) -> None:
     w = ViewerWindow(session)
     w.run()

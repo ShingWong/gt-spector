@@ -1,8 +1,47 @@
 import argparse
 import sys
+from collections.abc import Callable
+from typing import Any, cast
 
 
-def main():
+def apply_in_game_settings(session: Any, settings_str: str, gw: Any, navigator: Any) -> int:
+    from viewer import cli as cli_mod
+
+    if (
+        gw.identify(session) != "system_settings"
+        and navigator.goto("system_settings") != "system_settings"
+    ):
+        print("error: could not reach system_settings", file=sys.stderr)
+        return 1
+    pairs: dict[str, str] = {}
+    for part in settings_str.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "=" not in part:
+            print(f"error: expected key=value, got '{part}'", file=sys.stderr)
+            return 1
+        k, v = part.split("=", 1)
+        pairs[k.strip()] = v.strip()
+    unknown = [k for k in pairs if k not in cli_mod.IN_GAME_SETTINGS]
+    if unknown:
+        valid = ", ".join(sorted(cli_mod.IN_GAME_SETTINGS))
+        print(f"error: unknown setting(s) {unknown}; valid: {valid}", file=sys.stderr)
+        return 1
+    for k, v in pairs.items():
+        entry = cli_mod.IN_GAME_SETTINGS[k]
+        values = cast(set[str], entry["values"])
+        if v not in values:
+            valid = ", ".join(sorted(values))
+            print(f"error: {k}: invalid value '{v}'; valid: {valid}", file=sys.stderr)
+            return 1
+        setter = cast(Callable[[Any, str], str], entry["set"])
+        result = setter(session, v)
+        print(f"{k}={result}")
+    return 0
+
+
+def main() -> None:
     from .session import Session
 
     if "--list-sessions" in sys.argv:
@@ -21,6 +60,7 @@ def main():
     parser.add_argument("--source", default=None, help="Frame source (default: shm://<session>)")
     parser.add_argument("--cli", action="store_true", help="CLI mode instead of GUI")
     parser.add_argument("--bot-console", action="store_true", help="Bot management console")
+    parser.add_argument("--in-game-settings", default=None, help='one-shot init: "k=v,k2=v2"')
     args = parser.parse_args()
 
     if args.bot_console:
@@ -33,6 +73,17 @@ def main():
 
     source = args.source or f"shm://{args.session.lstrip(':')}"
     session = Session(args.session, source=source)
+
+    if args.in_game_settings:
+        from gt_spector.game_world import GameWorld
+        from gt_spector.locator import Locator
+        from gt_spector.navigator import Navigator
+
+        gw = GameWorld()
+        locator = Locator()
+        gw.set_locator(locator)
+        navigator = Navigator(gw, locator, session)
+        sys.exit(apply_in_game_settings(session, args.in_game_settings, gw, navigator))
 
     if args.cli:
         from viewer.cli import run_cli
