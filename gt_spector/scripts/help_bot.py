@@ -12,7 +12,7 @@ import time
 from typing import Any
 
 from gt_spector.locator import Locator
-from gt_spector.scripts import help_loop
+from gt_spector.scripts.help_loop import HelpLoop
 
 # The help trigger on the alliance menu (red when a request is active).
 TRIGGER_X = 1097
@@ -29,7 +29,7 @@ class HelpBot:
         self._session = None
         self._locator = Locator()
         self._n_cycles = 0
-        self.help_clicks = 0
+        self._loop = HelpLoop()
 
     def on_start(self, display: int) -> None:
         from gt_spector.game_world import GameWorld
@@ -40,7 +40,7 @@ class HelpBot:
         self._gw.set_locator(self._locator)
         self._session = Session(f":{display}", source=f"shm://{display}")
         self._n_cycles = 0
-        self.help_clicks = 0
+        self._loop = HelpLoop()
 
     def on_stop(self, display: int) -> None:
         pass
@@ -61,7 +61,7 @@ class HelpBot:
 
         # Click the help trigger (red indicator / help menu) to open the dialog.
         r, g, b = self._session.get_pixel(TRIGGER_X, TRIGGER_Y)
-        if help_loop.is_red(r, g, b):
+        if r >= 120 and g <= 90 and b <= 90:
             self._session.click(TRIGGER_X, TRIGGER_Y)
             time.sleep(1)
             self._session.refresh()
@@ -74,10 +74,9 @@ class HelpBot:
             self._n_cycles += 1
             return status
 
-        clicked = help_loop.run(self._session, None)
-        if clicked:
-            self.help_clicks += 1
-            self._n_cycles = 0  # re-navigate next cycle (help sent, dialog may close)
-            return f"help_clicked_{self.help_clicks}"
+        result = self._loop.run(self._session)
+        if result == "clicked":
+            self._n_cycles = 0  # re-navigate next cycle
+            return f"help_clicked_{self._loop.help_clicks}"
         self._n_cycles += 1
         return None
