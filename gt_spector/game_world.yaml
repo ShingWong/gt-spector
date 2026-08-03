@@ -133,6 +133,8 @@ locations:
   start_expire_more_static: {x: 651, y: 602, screens: [startup_login]}
   login_current_static: {x: 323, y: 125, screens: [igg_login]}
   login_use_another_static: {x: 518, y: 369, screens: [igg_login]}
+  login_select_igg_id_static: {x: 621, y: 34, screens: [select_igg_id]}
+  login_igg_id:    {x: 373, y: 161, screens: [select_igg_id]}
   system_settings_static: {x: 466, y: 248, screens: [settings]}
   account_static:    {x: 260, y: 417, screens: [settings]}
   map_search:        {x: 38,  y: 623, screens: [world_map, world_map_regional], static: true}
@@ -189,6 +191,11 @@ screens:
   igg_login:
     description: IGG login form (email/password). Identified by login_current_static.
     templates: [login_current_static]
+  select_igg_id:
+    description: Select IGG ID screen. Identified by the title; the ID area marks
+      where the account's ID number sits. There can be multiple IDs per account;
+      the FIRST ID is always in the login_igg_id area. Click it to finish login.
+    templates: [login_select_igg_id_static]
   account:
     description: account management menu. CHANGE ACCOUNT at 573,660.
     templates: [account_title_static]
@@ -224,6 +231,10 @@ screens:
 
 # Navigation: reachable screens from each screen + recommended action.
 navigation:
+  select_igg_id:
+    world_map:          {action: locate, name: login_igg_id}
+  igg_login:
+    select_igg_id:      {action: locate, name: login_login_static}
   startup_expired:
     world_map:          {action: locate, name: start_expire_ok_static}
   settings:
