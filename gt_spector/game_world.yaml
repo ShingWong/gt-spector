@@ -12,7 +12,7 @@ locations:
   login_failed_more: {x: 558, y: 767, screens: [login_failed_dialog]}
   afk_ok:            {x: 741, y: 676, screens: [afk_popup]}
   glory_league_go:   {x: 575, y: 654, screens: [glory_league_event]}
-  player_avatar:     {x: 48,  y: 44,  screens: [world_map, world_map_regional]}
+  avatar:            {x: 49,  y: 39,  screens: [world_map, world_map_regional]}
   shelter:           {x: 65,  y: 800, screens: [world_map, world_map_regional]}
   map_search:        {x: 38,  y: 623, screens: [world_map, world_map_regional]}
   chat:              {x: 150, y: 800, screens: [world_map, world_map_regional]}

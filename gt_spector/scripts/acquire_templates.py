@@ -20,7 +20,7 @@ from gt_spector import templates as T
 # User-provided click points (world map / regional). Names are the canonical
 # snake_case labels used across the game-world KB.
 CLICK_POINTS = {
-    "player_avatar": (48, 44),
+    "avatar": (49, 39),
     "shelter": (65, 800),
     "map_search": (38, 623),
     "chat": (150, 800),
