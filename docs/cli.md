@@ -73,12 +73,15 @@ python -m gt_spector --session :<display> --in-game-settings "graphics-quality=l
 Multiple settings are comma-separated:
 
 ```
-python -m gt_spector --session :<display> --in-game-settings "graphics-quality=low,frame-rate=low"
+python -m gt_spector --session :<display> --in-game-settings \
+  "graphics-quality=low,frame-rate=low,sound-effects=on,background-music=off"
 ```
 
 Valid keys and values:
 - `graphics-quality=low|high`
 - `frame-rate=low|mid|high`
+- `sound-effects=on|off`
+- `background-music=on|off`
 
 Settings are applied via deterministic pixel-color detection (no VLM). New
 settings are added to the `IN_GAME_SETTINGS` registry in `viewer/cli.py`.
