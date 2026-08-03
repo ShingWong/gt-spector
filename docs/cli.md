@@ -33,8 +33,11 @@ Raw commands also remain available: `pixel`, `click`, `key`, `type`, `move`,
 
 ```
 > go alliance_menu -v
-hop 1: world -> alliance -> alliance_menu
-hop 2: alliance_menu reached
+  hop world -> alliance
+  landed: alliance
+  hop alliance -> alliance_menu
+  landed: alliance_menu
+arrived at alliance_menu
 ```
 
 Static commands (`where`, `route`, `locate`, `label`, `screens`, `loc`) have no
@@ -44,13 +47,15 @@ Static commands (`where`, `route`, `locate`, `label`, `screens`, `loc`) have no
 
 ```
 > where
-current: world
+world
 
 > go alliance_menu -v
-hop 1: world -> alliance (clicked alliance_btn)
-hop 2: alliance -> alliance_menu (clicked menu_btn)
-reached alliance_menu
+  hop world -> alliance
+  landed: alliance
+  hop alliance -> alliance_menu
+  landed: alliance_menu
+arrived at alliance_menu
 
 > where
-current: alliance_menu
+alliance_menu
 ```
