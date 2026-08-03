@@ -163,7 +163,7 @@ def draw_markers(frame: np.ndarray, display: int) -> np.ndarray:
             if m.label:
                 for off, ch in enumerate(m.label):
                     px = bx0 + 2 + off * 7
-                    if px < w and by0 - 10 >= 0:
+                    if 0 <= px < w and 0 <= by0 - 10 < h:
                         result[by0 - 10, px] = color
             continue
 

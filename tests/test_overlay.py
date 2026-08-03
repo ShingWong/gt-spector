@@ -72,6 +72,26 @@ def test_draw_markers_drawn_when_enabled(cfg):
     assert not np.array_equal(result, frame)
 
 
+def test_draw_box_marker(cfg):
+    overlay, settings = cfg
+    frame = np.zeros((50, 50, 3), dtype=np.uint8)
+    overlay.add_marker(10, 5, 5, "B", shape="box", w=10, h=10)
+    settings.set_bot_overlay("bot01", True)
+    result = overlay.draw_markers(frame, 10)
+    assert not np.array_equal(result, frame)
+    assert result[5, 5].tolist() != [0, 0, 0]  # top-left corner drawn
+
+
+def test_draw_box_marker_near_edge_no_crash(cfg):
+    overlay, settings = cfg
+    frame = np.zeros((50, 50, 3), dtype=np.uint8)
+    # box at the bottom edge: label row by0-10 must stay in-bounds
+    overlay.add_marker(10, 5, 45, "E", shape="box", w=10, h=10)
+    settings.set_bot_overlay("bot01", True)
+    result = overlay.draw_markers(frame, 10)
+    assert not np.array_equal(result, frame)
+
+
 def test_cli_toggle_and_status_act_on_display(tmp_path):
     import os
     import subprocess
