@@ -8,7 +8,8 @@
     "h": 14,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "region_overview",
@@ -19,7 +20,8 @@
     "h": 6,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "region_search",
@@ -30,7 +32,8 @@
     "h": 24,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "alliance_flags",
@@ -41,7 +44,8 @@
     "h": 21,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "radar_station",
@@ -52,7 +56,8 @@
     "h": 24,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "campaign_menu",
@@ -63,7 +68,8 @@
     "h": 24,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "bag",
@@ -74,7 +80,8 @@
     "h": 29,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "mission_menu_static",
@@ -85,7 +92,8 @@
     "h": 30,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "mission_menu_count",
@@ -96,7 +104,8 @@
     "h": 25,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "chat_static",
@@ -107,7 +116,8 @@
     "h": 15,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "chat_unread",
@@ -118,7 +128,8 @@
     "h": 23,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "vip_reward",
@@ -129,7 +140,8 @@
     "h": 10,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "alliance_menu_static",
@@ -140,7 +152,8 @@
     "h": 31,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "alliance_menu_count",
@@ -151,7 +164,8 @@
     "h": 9,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "messages_static",
@@ -162,7 +176,8 @@
     "h": 20,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "messages_count",
@@ -173,7 +188,8 @@
     "h": 19,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "map_alliance_help",
@@ -184,7 +200,8 @@
     "h": 19,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "bat_static",
@@ -195,7 +212,8 @@
     "h": 23,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "bag_count",
@@ -206,7 +224,8 @@
     "h": 17,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "hero_static",
@@ -217,7 +236,8 @@
     "h": 22,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "hero_count",
@@ -228,7 +248,8 @@
     "h": 18,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "radar_station_static",
@@ -239,7 +260,8 @@
     "h": 14,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "radar_station_count",
@@ -250,7 +272,8 @@
     "h": 16,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "region_static",
@@ -273,7 +296,8 @@
     "h": 14,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "back_static",
@@ -404,7 +428,8 @@
     "h": 34,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "account_static",
@@ -415,7 +440,8 @@
     "h": 26,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "account_title_static",
@@ -462,7 +488,8 @@
     "h": 24,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "igg_account_static",
@@ -473,7 +500,8 @@
     "h": 41,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "start_session_expired_static",
@@ -520,7 +548,8 @@
     "h": 12,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "login_use_another_static",
@@ -531,7 +560,8 @@
     "h": 21,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "login_enter_email_static",
@@ -542,7 +572,8 @@
     "h": 10,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "login_enter_password",
@@ -553,7 +584,8 @@
     "h": 17,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "login_login_static",
@@ -564,7 +596,8 @@
     "h": 29,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "login_eye_static",
@@ -575,7 +608,8 @@
     "h": 27,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "login_select_igg_id_static",
@@ -598,7 +632,8 @@
     "h": 27,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "avatar",
@@ -609,7 +644,8 @@
     "h": 60,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
-    "reader": "vlm"
+    "reader": "vlm",
+    "fixed": false
   },
   {
     "name": "alliance_title_static",
@@ -666,6 +702,42 @@
     "y": 173,
     "w": 32,
     "h": 27,
+    "game_version": "Doomsday_1.59.0",
+    "score_threshold": 0.75,
+    "reader": "vlm",
+    "fixed": true
+  },
+  {
+    "name": "settings_system_settings",
+    "shape": "rect",
+    "x": 449,
+    "y": 235,
+    "w": 49,
+    "h": 45,
+    "game_version": "Doomsday_1.59.0",
+    "score_threshold": 0.75,
+    "reader": "vlm",
+    "fixed": false
+  },
+  {
+    "name": "system_settings_title_static",
+    "shape": "rect",
+    "x": 470,
+    "y": 133,
+    "w": 153,
+    "h": 21,
+    "game_version": "Doomsday_1.59.0",
+    "score_threshold": 0.75,
+    "reader": "vlm",
+    "fixed": true
+  },
+  {
+    "name": "system_settings_exit_static",
+    "shape": "rect",
+    "x": 994,
+    "y": 132,
+    "w": 26,
+    "h": 22,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
     "reader": "vlm",

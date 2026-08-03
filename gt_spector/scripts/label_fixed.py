@@ -20,18 +20,20 @@ def main_args(display: int, screen: str | None) -> None:
     # Which location entries mention this screen
     screen_locs = {n: v for n, v in gw.locations.items()
                    if screen in v.get("screens", [])}
-    # Filter to templates that are marked fixed
-    fixed_templates = {t.name: t for t in T.load_templates() if t.fixed}
+    # All templates that have a location on this screen; color by fixed status.
+    templates = {t.name: t for t in T.load_templates()}
     labeled = 0
     for name in screen_locs:
-        t = fixed_templates.get(name)
+        t = templates.get(name)
         if t is None:
             continue
-        overlay.add_marker(display, t.x, t.y, t.name, r=255, g=0, b=0,
-                           shape="box", w=t.w, h=t.h)
+        color = (255, 0, 0) if t.fixed else (0, 200, 255)
+        overlay.add_marker(display, t.x, t.y, t.name, r=color[0], g=color[1],
+                           b=color[2], shape="box", w=t.w, h=t.h)
         labeled += 1
-        print(f"  {t.name} @ ({t.x},{t.y}) {t.w}x{t.h}")
-    print(f"labeled {labeled} fixed templates for {screen}")
+        tag = "fixed" if t.fixed else "dynamic"
+        print(f"  {t.name} @ ({t.x},{t.y}) {t.w}x{t.h} [{tag}]")
+    print(f"labeled {labeled} templates for {screen}")
 
 
 def main() -> None:
