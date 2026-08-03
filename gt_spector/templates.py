@@ -30,6 +30,14 @@ class Template:
     game_version: str
     score_threshold: float
     reader: str = "vlm"
+    # Fixed-location templates sit at an exact, never-changing pixel position
+    # (the *_static ones). They match only at their stored (x,y) - no sliding
+    # search. Defaults True for *_static names.
+    fixed: bool = False
+
+
+def _is_fixed_name(name: str) -> bool:
+    return name.endswith("_static")
 
 
 def _index_path() -> Path:

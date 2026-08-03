@@ -9,6 +9,28 @@ import numpy as np
 from gt_spector import templates as _templates
 
 
+def _corr_score(region: np.ndarray, patch: np.ndarray, mask: np.ndarray | None) -> float:
+    """Normalized correlation of `patch` against `region` (same size).
+
+    Computes a score in [-1, 1] like TM_CCOEFF_NORMED for a single aligned
+    position, used by fixed-location templates.
+    """
+    region = region.astype(np.float32)
+    patch = patch.astype(np.float32)
+    if mask is not None:
+        m = mask.astype(np.float32)
+        rx = region - (region * m).sum() / max(m.sum(), 1)
+        px = patch - (patch * m).sum() / max(m.sum(), 1)
+        num = float((rx * px * m).sum())
+        den = float(np.sqrt(((rx * rx) * m).sum() * ((px * px) * m).sum()))
+    else:
+        rx = region - region.mean()
+        px = patch - patch.mean()
+        num = float((rx * px).sum())
+        den = float(np.sqrt((rx * rx).sum() * (px * px).sum()))
+    return num / den if den > 0 else 0.0
+
+
 @dataclass
 class LocateResult:
     cx: int
@@ -20,6 +42,7 @@ class LocateResult:
 class Locator:
     def __init__(self) -> None:
         self._vlm_fallback: Callable[[np.ndarray, str, float], LocateResult | None] | None = None
+        self._gray_cache: dict[int, np.ndarray] = {}
 
     def set_vlm_fallback(self, fn: Callable[[np.ndarray, str, float], LocateResult | None]) -> None:
         self._vlm_fallback = fn
@@ -27,8 +50,20 @@ class Locator:
     def _gray(self, frame: np.ndarray) -> np.ndarray:
         if frame.ndim == 2:
             return frame
+        # Cache grayscale per frame object: identify() matches many templates
+        # against the same frame, and cvtColor on the full 1152x864 frame is
+        # ~13ms - the dominant cost. Cache by id() to reuse within one frame.
+        fid = id(frame)
+        cached = self._gray_cache.get(fid)
+        if cached is not None:
+            return cached
         rgb = frame[:, :, :3]
-        return cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+        gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+        # Keep only the most recent frames to avoid unbounded growth.
+        if len(self._gray_cache) > 8:
+            self._gray_cache.clear()
+        self._gray_cache[fid] = gray
+        return gray
 
     # Search window radius around the template's stored position. Components
     # are at known fixed locations; searching a small region around the stored
@@ -49,7 +84,20 @@ class Locator:
         if th > fh or tw > fw:
             return LocateResult(0, 0, 0.0, False)
 
-        # Restrict matching to a window around the stored position.
+        # Fixed-location template: compare the patch exactly at its stored
+        # (x,y) - no sliding search. Near-instant.
+        if t.fixed:
+            x0, y0 = t.x, t.y
+            if x0 + tw > fw or y0 + th > fh:
+                return LocateResult(0, 0, 0.0, False)
+            region = gray[y0:y0 + th, x0:x0 + tw]
+            # Normalized correlation of the patch at the exact location.
+            score = _corr_score(region, pgray, _templates.get_mask(name))
+            cx = x0 + tw // 2
+            cy = y0 + th // 2
+            return LocateResult(cx, cy, float(score), True)
+
+        # Sliding search restricted to a window around the stored position.
         r = self.SEARCH_RADIUS
         x0 = max(0, t.x - r)
         y0 = max(0, t.y - r)
