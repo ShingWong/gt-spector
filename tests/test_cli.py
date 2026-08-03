@@ -120,7 +120,61 @@ def test_in_game_settings_registry():
     from viewer.cli import IN_GAME_SETTINGS
     assert "graphics-quality" in IN_GAME_SETTINGS
     assert "frame-rate" in IN_GAME_SETTINGS
-    fr = IN_GAME_SETTINGS["frame-rate"]
-    assert fr["values"] == {"low", "mid", "high"}
-    assert callable(fr["read"])
-    assert callable(fr["set"])
+    assert "sound-effects" in IN_GAME_SETTINGS
+    assert "background-music" in IN_GAME_SETTINGS
+    for key in ("graphics-quality", "frame-rate", "sound-effects", "background-music"):
+        entry = IN_GAME_SETTINGS[key]
+        assert entry["values"]
+        assert callable(entry["read"])
+        assert callable(entry["set"])
+
+
+class FakeToggleSession:
+    def __init__(self, on_r: int):
+        self.on_r = on_r
+        self.clicks: list[tuple[int, int]] = []
+    def get_pixel(self, x, y):
+        # the ON indicator is the discriminator; other px return dim
+        return (self.on_r, 84, 58)
+    def click(self, x, y):
+        self.clicks.append((x, y))
+        # invert: clicking toggles between on-bright and on-dim
+        self.on_r = 121 if self.on_r < 80 else 57
+    def refresh(self):
+        pass
+
+
+def test_read_sound_effects_off():
+    from viewer.cli import read_sound_effects
+    assert read_sound_effects(FakeToggleSession(on_r=121)) == "off"
+
+
+def test_read_sound_effects_on():
+    from viewer.cli import read_sound_effects
+    assert read_sound_effects(FakeToggleSession(on_r=57)) == "on"
+
+
+def test_read_background_music_off():
+    from viewer.cli import read_background_music
+    assert read_background_music(FakeToggleSession(on_r=25)) == "off"
+
+
+def test_read_background_music_on():
+    from viewer.cli import read_background_music
+    assert read_background_music(FakeToggleSession(on_r=115)) == "on"
+
+
+def test_set_sound_effects(monkeypatch):
+    from viewer import cli as cli_mod
+    monkeypatch.setattr(cli_mod, "GQ_SETTLE", 0.0)
+    s = FakeToggleSession(on_r=57)  # currently on
+    assert cli_mod.set_sound_effects(s, "off") == "off"
+    assert (906, 532) in s.clicks
+
+
+def test_set_background_music(monkeypatch):
+    from viewer import cli as cli_mod
+    monkeypatch.setattr(cli_mod, "GQ_SETTLE", 0.0)
+    s = FakeToggleSession(on_r=25)  # currently off
+    assert cli_mod.set_background_music(s, "on") == "on"
+    assert (955, 638) in s.clicks

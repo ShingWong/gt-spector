@@ -19,6 +19,11 @@ FR_LOW = (745, 310)
 FR_MID = (858, 310)
 FR_HIGH = (973, 310)
 
+SOUND_OFF = (906, 532)
+SOUND_ON = (955, 532)
+MUSIC_OFF = (906, 638)
+MUSIC_ON = (955, 638)
+
 
 def read_graphics_quality(session: Any) -> str:
     r, _, _ = session.get_pixel(*GQ_HIGH)
@@ -59,6 +64,40 @@ def set_frame_rate(session: Any, target: str) -> str:
     return read_frame_rate(session)
 
 
+def read_sound_effects(session: Any) -> str:
+    r, _, _ = session.get_pixel(*SOUND_ON)
+    return "off" if r >= 80 else "on"
+
+
+def set_sound_effects(session: Any, target: str) -> str:
+    current = read_sound_effects(session)
+    if current == target:
+        return current
+    click = SOUND_OFF if target == "off" else SOUND_ON
+    session.click(*click)
+    import time
+    time.sleep(GQ_SETTLE)
+    session.refresh()
+    return read_sound_effects(session)
+
+
+def read_background_music(session: Any) -> str:
+    r, _, _ = session.get_pixel(*MUSIC_ON)
+    return "on" if r >= 80 else "off"
+
+
+def set_background_music(session: Any, target: str) -> str:
+    current = read_background_music(session)
+    if current == target:
+        return current
+    click = MUSIC_OFF if target == "off" else MUSIC_ON
+    session.click(*click)
+    import time
+    time.sleep(GQ_SETTLE)
+    session.refresh()
+    return read_background_music(session)
+
+
 IN_GAME_SETTINGS = {
     "graphics-quality": {
         "values": {"low", "high"},
@@ -69,6 +108,16 @@ IN_GAME_SETTINGS = {
         "values": {"low", "mid", "high"},
         "read": read_frame_rate,
         "set": set_frame_rate,
+    },
+    "sound-effects": {
+        "values": {"on", "off"},
+        "read": read_sound_effects,
+        "set": set_sound_effects,
+    },
+    "background-music": {
+        "values": {"on", "off"},
+        "read": read_background_music,
+        "set": set_background_music,
     },
 }
 
