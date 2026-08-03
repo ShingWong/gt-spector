@@ -62,3 +62,77 @@ def test_apply_in_game_settings_unknown_key():
 
     result = apply_in_game_settings(None, "bogus=1", FakeGW(), FakeNav())
     assert result != 0  # non-zero exit on unknown key
+
+
+def test_apply_in_game_settings_invalid_value(monkeypatch):
+    from gt_spector.__main__ import apply_in_game_settings
+    from viewer import cli as cli_mod
+
+    class FakeNav:
+        def goto(self, target):
+            return target
+
+    class FakeGW:
+        def identify(self, session):
+            return "system_settings"
+
+    monkeypatch.setattr(
+        cli_mod,
+        "IN_GAME_SETTINGS",
+        {
+            "graphics-quality": {
+                "values": {"low", "high"},
+                "read": lambda s: "low",
+                "set": lambda s, t: t,
+            }
+        },
+    )
+
+    result = apply_in_game_settings(None, "graphics-quality=medium", FakeGW(), FakeNav())
+    assert result != 0  # non-zero exit on invalid value for known key
+
+
+def test_apply_in_game_settings_navigation_failure(monkeypatch):
+    from gt_spector.__main__ import apply_in_game_settings
+
+    class FakeNav:
+        def goto(self, target):
+            return "blocked"
+
+    class FakeGW:
+        def identify(self, session):
+            return "settings"
+
+    result = apply_in_game_settings(None, "graphics-quality=low", FakeGW(), FakeNav())
+    assert result != 0  # non-zero exit when system_settings unreachable
+
+
+def test_apply_in_game_settings_set_failure(monkeypatch):
+    from gt_spector.__main__ import apply_in_game_settings
+    from viewer import cli as cli_mod
+
+    class FakeNav:
+        def goto(self, target):
+            return target
+
+    class FakeGW:
+        def identify(self, session):
+            return "system_settings"
+
+    def fake_set(session, target):
+        return "stuck"
+
+    monkeypatch.setattr(
+        cli_mod,
+        "IN_GAME_SETTINGS",
+        {
+            "graphics-quality": {
+                "values": {"low", "high"},
+                "read": lambda s: "low",
+                "set": fake_set,
+            }
+        },
+    )
+
+    result = apply_in_game_settings(None, "graphics-quality=low", FakeGW(), FakeNav())
+    assert result != 0  # non-zero exit when setter does not apply target

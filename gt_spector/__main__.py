@@ -37,6 +37,9 @@ def apply_in_game_settings(session: Any, settings_str: str, gw: Any, navigator: 
             return 1
         setter = cast(Callable[[Any, str], str], entry["set"])
         result = setter(session, v)
+        if result != v:
+            print(f"{k}: failed to set {v} (result {result})", file=sys.stderr)
+            return 1
         print(f"{k}={result}")
     return 0
 
