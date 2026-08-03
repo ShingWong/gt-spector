@@ -1,3 +1,6 @@
+import tkinter.simpledialog as sd
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
@@ -35,3 +38,28 @@ def test_circle_mask_nonzero(cfg):
     T.save_template(t, frame, mask)
     m = T.get_mask("circle")
     assert m is not None and m[20, 20] == 1 and m[1, 1] == 0
+
+
+def test_freehand_box_spans_polygon_extent(cfg, monkeypatch):
+    from viewer.gui import ViewerWindow
+
+    frame = np.zeros((100, 100, 3), dtype=np.uint8)
+    frame[30:70, 40:80] = 200
+    poly = [(40, 30), (80, 30), (80, 70), (40, 70), (42, 33)]
+    win = SimpleNamespace(
+        _template_mode="freehand",
+        _template_poly=poly,
+        _session=SimpleNamespace(frame=frame),
+        _status=SimpleNamespace(config=lambda **kw: None),
+        _template_mode_var=SimpleNamespace(set=lambda v: None),
+        _tk=None,
+    )
+    monkeypatch.setattr(sd, "askstring", lambda *a, **kw: "freehand_btn")
+    ViewerWindow._save_template_from_box(win, 40, 30, 42, 33, "freehand")
+    t = next(x for x in T.load_templates() if x.name == "freehand_btn")
+    patch = T.get_patch("freehand_btn")
+    mask = T.get_mask("freehand_btn")
+    assert (t.x, t.y, t.w, t.h) == (40, 30, 40, 40)
+    assert patch is not None and patch.shape == (40, 40, 3)
+    assert mask is not None and mask.shape == (40, 40)
+    assert mask[0, 0] == 1 and mask[39, 39] == 1

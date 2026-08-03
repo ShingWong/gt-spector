@@ -164,8 +164,14 @@ class ViewerWindow:
         mode = mode or self._template_mode
         if not mode:
             return
-        x0, y0 = min(sx, fx), min(sy, fy)
-        x1, y1 = max(sx, fx), max(sy, fy)
+        if mode == "freehand" and self._template_poly:
+            x0 = min(px for px, _ in self._template_poly)
+            y0 = min(py for _, py in self._template_poly)
+            x1 = max(px for px, _ in self._template_poly)
+            y1 = max(py for _, py in self._template_poly)
+        else:
+            x0, y0 = min(sx, fx), min(sy, fy)
+            x1, y1 = max(sx, fx), max(sy, fy)
         if x1 - x0 < 1 or y1 - y0 < 1:
             self._status.config(text="Template region too small — drag a larger area")
             return

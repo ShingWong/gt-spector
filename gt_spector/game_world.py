@@ -164,7 +164,9 @@ class GameWorld:
 
         current = screen
         for nxt in path[1:]:
-            self._resolve_hop(session, current, nxt)
+            if not self._resolve_hop(session, current, nxt):
+                logger.warning("Hop %s -> %s failed; aborting navigation", current, nxt)
+                return False
             import time
 
             time.sleep(2.5)

@@ -44,20 +44,20 @@ def load_templates() -> list[Template]:
     p = _index_path()
     if not p.exists():
         return []
+    data = json.loads(p.read_text())
     try:
-        data = json.loads(p.read_text())
         return [Template(**m) for m in data]
-    except (json.JSONDecodeError, KeyError, TypeError):
+    except (KeyError, TypeError):
         return []
 
 
 def save_template(t: Template, patch: np.ndarray, mask: np.ndarray | None = None) -> Template:
+    templates = [x for x in load_templates() if x.name != t.name]
     TEMPLATE_ROOT.mkdir(parents=True, exist_ok=True)
     (TEMPLATE_ROOT / "patches").mkdir(parents=True, exist_ok=True)
     Image.fromarray(patch[:, :, :3]).save(_patch_path(t.name))
     if mask is not None:
         Image.fromarray((mask * 255).astype(np.uint8)).save(_mask_path(t.name))
-    templates = [x for x in load_templates() if x.name != t.name]
     templates.append(t)
     _index_path().write_text(json.dumps([asdict(x) for x in templates], indent=2))
     return t

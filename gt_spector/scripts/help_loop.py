@@ -12,7 +12,7 @@ VARIANCE = 0.20
 CLICK_X = 527
 CLICK_Y = 682
 
-_locator: Locator | None = None
+_locator: Locator | None = Locator()
 HELP_TEMPLATE = "help_btn"
 
 

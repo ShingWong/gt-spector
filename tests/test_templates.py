@@ -1,3 +1,5 @@
+import json
+
 import numpy as np
 import pytest
 
@@ -56,3 +58,17 @@ def test_delete(cfg):
 
 def test_version_tag_is_current(cfg):
     assert GAME_VERSION == "Doomsday_1.59.0"
+
+
+def test_corrupt_index_not_wiped(cfg):
+    idx = template_dir() / "templates.json"
+    idx.write_text("{ this is not json")
+    patch = np.zeros((8, 8, 3), dtype=np.uint8)
+    t = Template(name="new_btn", shape="rect", x=0, y=0, w=8, h=8,
+                 game_version=GAME_VERSION, score_threshold=0.8)
+    with pytest.raises(json.JSONDecodeError):
+        save_template(t, patch)
+    assert idx.read_text() == "{ this is not json"
+    with pytest.raises(json.JSONDecodeError):
+        delete_template("new_btn")
+    assert idx.read_text() == "{ this is not json"
