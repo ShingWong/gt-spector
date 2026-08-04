@@ -135,6 +135,7 @@ version: 1
 locations:
   exit_cancel:       {x: 359, y: 654, screens: [exit_dialog]}
   exit_ok:           {x: 801, y: 648, screens: [exit_dialog]}
+  exit_game_confirmation_static: {x: 524, y: 392, screens: [exit_dialog]}
   login_failed_ok:   {x: 499, y: 647, screens: [login_failed_dialog]}
   login_failed_device_login: {x: 420, y: 767, screens: [login_failed_dialog]}
   login_failed_more: {x: 558, y: 767, screens: [login_failed_dialog]}
@@ -298,8 +299,9 @@ screens:
       Content is SCROLLABLE vertically. Scroll by placing the mouse at (600,400).
     templates: [system_settings_title_static]
   exit_dialog:
-    description: '"Exit game?" confirmation with CANCEL / OK'
-    fingerprint: []
+    description: '"Exit game?" confirmation with CANCEL / OK. Identified by
+      the confirmation title; ESC cancels, OK exits.'
+    templates: [exit_game_confirmation_static]
   glory_league_event:
     description: 'Pompeii Glory League event splash with GO button'
     fingerprint:
@@ -316,7 +318,9 @@ screens:
       - [517, 671, 220, 255, 220, 255, 220, 255]  # bright title text
       - [550, 820, 0, 60, 0, 60, 0, 60]  # dim dialog panel bottom
   world_map:
-    description: world map, zoomed in (no minimap)
+    description: world map, zoomed in (no minimap). Map level is discriminated
+      by the minimap fingerprint (see map_levels); the avatar template is the
+      screen-level identifier.
     templates: [avatar]
   world_map_regional:
     description: regional map, minimap top-right
