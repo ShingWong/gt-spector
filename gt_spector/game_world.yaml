@@ -168,6 +168,7 @@ locations:
   start_session_expired_static: {x: 638, y: 406, screens: [startup_expired]}
   start_expire_ok_static: {x: 576, y: 561, screens: [startup_expired]}
   start_expire_more_static: {x: 651, y: 602, screens: [startup_login]}
+  start_norah_static:  {x: 507, y: 657, screens: [start_norah]}
   login_current_static: {x: 323, y: 125, screens: [igg_login]}
   login_use_another_static: {x: 518, y: 369, screens: [igg_login]}
   login_select_igg_id_static: {x: 621, y: 34, screens: [select_igg_id]}
@@ -253,6 +254,13 @@ screens:
   startup_expired:
     description: startup session-expired dialog with OK button.
     templates: [start_session_expired_static]
+  start_norah:
+    description: startup Norah story screen. Only navigation is ESC to the
+      next screen (an event screen or the shelter view). The next screen is
+      unknown until re-identified; Navigator advances via ESC and recomputes
+      the route from whatever known screen appears.
+    templates: [start_norah_static]
+    advance: esc
   igg_login:
     description: IGG login form (email/password). Identified by login_current_static.
     templates: [login_current_static]
@@ -303,6 +311,8 @@ navigation:
     select_igg_id:      {action: locate, name: login_login_static}
   startup_expired:
     world_map:          {action: locate, name: start_expire_ok_static}
+  glory_league_event:
+    shelter_view:       {action: click, location: glory_league_go}
   settings:
     avatar_menu:        {action: locate, name: exit_static}
     account:            {action: locate, name: account_static}

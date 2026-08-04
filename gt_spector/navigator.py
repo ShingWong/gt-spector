@@ -90,6 +90,15 @@ class Navigator:
                 return None
 
         for _ in range(MAX_ESC + 1):
+            if self._is_esc_advance(current):
+                pressed = self._do_esc_advance(current)
+                self._report(f"esc-advance: {current} -> {pressed}")
+                current = pressed
+                if current is None:
+                    return None
+                if current == target:
+                    return target
+                continue  # recompute route from the landing screen
             path = self.route_to(target, screen=current)
             if path is None:
                 return None
@@ -122,3 +131,34 @@ class Navigator:
             if self._gw.identify(self._session) == target:
                 return target
         return current
+
+    def _is_esc_advance(self, screen: str | None) -> bool:
+        """True if `screen` is an ESC-advance screen (unknown next screen).
+
+        Screens marked `advance: esc` in the game world (e.g. startup Norah
+        story) progress via a single ESC to a screen that isn't known until
+        it appears. The caller re-identifies and recomputes the route from
+        wherever it lands.
+        """
+        if screen is None:
+            return False
+        spec = self._gw.screens.get(screen, {})
+        if isinstance(spec, dict):
+            return spec.get("advance") == "esc"
+        return False
+
+    def _do_esc_advance(self, source: str) -> str | None:
+        """Press ESC on an advance screen and return the resulting screen.
+
+        Polls identify() until the screen changes away from the advance
+        screen (the transition can take a moment and may land on any known
+        screen). Returns the new screen, or None if it never changes.
+        """
+        self._session.key_press("Escape")
+        for _ in range(MAX_SETTLE_TRIES):
+            time.sleep(MIN_SETTLE)
+            self._session.refresh()
+            current: str | None = self._gw.identify(self._session)
+            if current is not None and current != source:
+                return current
+        return self._gw.identify(self._session)

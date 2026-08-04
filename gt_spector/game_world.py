@@ -129,6 +129,9 @@ class GameWorld:
                 return False
             session.click(res.cx, res.cy)
             return True
+        if action.get("action") == "esc":
+            session.key_press("Escape")
+            return True
         if action.get("action") == "zoom_out":
             session.scroll(5, 4)
             return True

@@ -742,5 +742,17 @@
     "score_threshold": 0.75,
     "reader": "vlm",
     "fixed": true
+  },
+  {
+    "name": "start_norah_static",
+    "shape": "rect",
+    "x": 507,
+    "y": 657,
+    "w": 106,
+    "h": 14,
+    "game_version": "Doomsday_1.59.0",
+    "score_threshold": 0.75,
+    "reader": "vlm",
+    "fixed": false
   }
 ]

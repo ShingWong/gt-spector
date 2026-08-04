@@ -219,6 +219,60 @@ def test_goto_already_at_target():
     assert s.esc_count == 0
 
 
+def test_goto_esc_advance_to_unknown_then_recompute():
+    import numpy as np
+
+    from gt_spector.navigator import Navigator
+
+    # start_norah: advance:esc lands on event screen (unknown to route),
+    # which has a route onward to shelter_view.
+    landing = {"event": "event"}
+
+    class EAGW:
+        def __init__(self):
+            self.screens = {
+                "start_norah": {"advance": "esc"},
+                "event": {"advance": ""},
+                "shelter_view": {"advance": ""},
+            }
+            self.navigation = {
+                "event": {"shelter_view": {"action": "click", "location": "x"}},
+            }
+            self._locator = None
+
+        def identify(self, session):
+            # identify returns the screen NAME (the key), matching GameWorld
+            if session.name in self.screens:
+                return session.name
+            return None
+
+        def _resolve_hop(self, session, screen, target):
+            session.name = target
+            return True
+
+    class EASession:
+        def __init__(self):
+            self.name = "start_norah"
+            self.frame = np.zeros((50, 50, 3), dtype=np.uint8)
+            self.esc_count = 0
+
+        def refresh(self):
+            return self.frame
+
+        def key_press(self, key):
+            if key == "Escape":
+                self.esc_count += 1
+                # ESC from start_norah lands on the unknown event screen
+                self.name = landing["event"]
+
+    gw = EAGW()
+    s = EASession()
+    n = Navigator(gw, None, s)
+    result = n.goto("shelter_view")
+    assert result == "shelter_view"
+    assert s.esc_count == 1
+
+
 def test_goto_trace_reports_hops(monkeypatch):
     # reuse FakeGW/FakeSession/_nav from the existing file
     from gt_spector import navigator as navmod
