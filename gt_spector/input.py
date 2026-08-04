@@ -26,6 +26,20 @@ class Input:
             return ["mousemove", "--window", w, str(x), str(y)]
         return ["mousemove", str(x), str(y)]
 
+    def _focus(self) -> None:
+        """Give the game window X focus (no WM on Xvfb, so this is required).
+
+        Without a window manager the game window never gains focus and
+        xdotool keyboard/mouse events don't reach it (XGetInputFocus returns
+        the root window). SendInput-based helpers (sendtext.exe) do their own
+        SetForegroundWindow, but xdotool events need an explicit focus.
+        windowactivate needs _NET_ACTIVE_WINDOW support (absent on Xvfb), so
+        only windowfocus is used.
+        """
+        w = self._find_window()
+        if w:
+            self._xd(["windowfocus", w])
+
     def move_mouse(self, x: int, y: int, speed: float = 400) -> None:
         self._xd(self._mw(x, y))
 
@@ -36,18 +50,22 @@ class Input:
         self._xd(["mouseup", "1"])
 
     def click(self, x: int, y: int, speed: float = 400) -> None:
+        self._focus()
         self._xd(self._mw(x, y))
         self._xd(["click", "1"])
 
     def click_right(self, x: int, y: int) -> None:
+        self._focus()
         self._xd(self._mw(x, y))
         self._xd(["click", "3"])
 
     def double_click(self, x: int, y: int) -> None:
+        self._focus()
         self._xd(self._mw(x, y))
         self._xd(["click", "--repeat", "2", "--delay", "40", "1"])
 
     def middle_click(self, x: int, y: int) -> None:
+        self._focus()
         self._xd(self._mw(x, y))
         self._xd(["click", "2"])
 

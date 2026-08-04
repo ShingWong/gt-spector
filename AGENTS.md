@@ -64,7 +64,7 @@ For one-shot initialization of game options (or after Wine-prefix rebuilds):
 (see `docs/cli.md` "In-Game Settings").
 
 To switch a bot's IGG account:
-`change-account <email> [password]` in the CLI (see docs/cli.md "Change Account").
+`change_account <email> [password]` in the CLI (see docs/cli.md "Change Account").
 
 ## Code Style
 

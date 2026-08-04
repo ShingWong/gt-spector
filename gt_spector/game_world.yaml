@@ -287,9 +287,9 @@ screens:
       always in the login_igg_id area. Click it to finish login.
     templates: [login_select_igg_id_static]
   igg_id_confirm:
-    description: IGG ID confirm dialog. Identified by the browser's X plus the
-      confirm text; OK finishes the login and loads the game.
-    templates: [igg_login_exit_static, login_confirm_igg_id_static]
+    description: IGG ID confirm dialog. Identified by the confirm text; OK
+      finishes the login and loads the game.
+    templates: [login_confirm_igg_id_static]
   account:
     description: account management menu. CHANGE ACCOUNT at 573,660.
     templates: [account_title_static]

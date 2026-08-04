@@ -21,6 +21,18 @@ def test_cli_navigation_commands_exist():
         assert hasattr(cli, f"do_{cmd}"), f"missing do_{cmd}"
 
 
+def test_change_account_dispatch_via_onecmd(monkeypatch):
+    from gt_spector.session import Session
+    from viewer import cli as cli_mod
+    s = Session(":99")
+    cli = cli_mod.CliSession.__new__(cli_mod.CliSession)
+    cli._session = s
+    calls = []
+    monkeypatch.setattr(cli, "do_change_account", lambda arg: calls.append(arg))
+    cli.onecmd("change_account sr02-08@mx1.us")
+    assert calls == ["sr02-08@mx1.us"]
+
+
 def test_do_change_account_wires_flow(monkeypatch):
     from viewer import cli as cli_mod
 

@@ -112,7 +112,7 @@ Run this during provisioning (or after a Wine-prefix rebuild) for each bot.
 Switch a bot to a specific IGG account via the embedded browser login.
 
   python -m gt_spector --session :<display> --cli
-  > change-account sr02-07@mx1.us
+  > change_account sr02-07@mx1.us
 
 The command walks the full login flow: Settings -> Account -> Change Account
 -> IGG Account -> browser login form. It pauses at each step and asks you to
