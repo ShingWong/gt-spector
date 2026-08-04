@@ -16,6 +16,7 @@ import argparse
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -154,6 +155,8 @@ def cmd_init(name: str, account: str | None = None):
     _install_fonts(dest)
     os.makedirs(os.path.join(dest, "dxvk-cache"), exist_ok=True)
 
+    _apply_standard_settings(name, dest)
+
     print(f"✓ Prefix {name} ready (login via the in-game browser)")
     return {
         "name": name,
@@ -161,6 +164,74 @@ def cmd_init(name: str, account: str | None = None):
         "prefix": dest,
         "display": _display_num(name),
     }
+
+
+_STANDARD_SETTINGS = "graphics-quality=low,frame-rate=low,sound-effects=off,background-music=off"
+
+
+def _apply_standard_settings(name: str, dest: str) -> None:
+    """Start the game, apply the standard in-game config, then stop it.
+
+    Fresh prefixes start with the game defaults (high/mid/on/on), which
+    waste GPU. Launching the game once and driving the in-game settings
+    screen to the standard values makes every provisioned bot consistent.
+    """
+    try:
+        n = int(name.replace("bot", ""))
+        display = 9 + n
+    except ValueError:
+        display = 9
+    bot = _Bot(name=name, prefix=dest, display=display)
+    manager = _Manager()
+    manager.start_game(bot)
+    print(f"Applying standard in-game settings on :{display}...")
+    _wait_for_game(bot)
+    _run_settings_apply(display)
+    manager.stop_game(bot)
+
+
+def _Bot(name: str, prefix: str, display: int):
+    from gt_spector.bot_manager import Bot
+    return Bot(name=name, prefix=prefix, display=display, shm_id=display)
+
+
+def _Manager():
+    from gt_spector.bot_manager import BotManager
+    return BotManager()
+
+
+def _wait_for_game(bot, timeout: float = 180.0) -> None:
+    """Poll the game's frame until it produces non-blank content."""
+    from gt_spector.session import Session
+    s = Session(f":{bot.display}", source=f"shm://{bot.display}")
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            s.refresh()
+            if float(s.frame.std()) > 2.0:
+                return
+        except (OSError, ValueError, AttributeError):
+            pass
+        time.sleep(5)
+    print(f"WARNING: game on :{bot.display} not ready after {timeout}s", file=sys.stderr)
+
+
+def _run_settings_apply(display: int) -> None:
+    """Drive the in-game settings to the standard config."""
+    from gt_spector.__main__ import apply_in_game_settings
+    from gt_spector.game_world import GameWorld
+    from gt_spector.locator import Locator
+    from gt_spector.navigator import Navigator
+    from gt_spector.session import Session
+
+    s = Session(f":{display}", source=f"shm://{display}")
+    gw = GameWorld()
+    locator = Locator()
+    gw.set_locator(locator)
+    navigator = Navigator(gw, locator, s)
+    rc = apply_in_game_settings(s, _STANDARD_SETTINGS, gw, navigator)
+    if rc != 0:
+        print("WARNING: could not apply standard in-game settings", file=sys.stderr)
 
 
 def _install_fonts(dest: str) -> None:
