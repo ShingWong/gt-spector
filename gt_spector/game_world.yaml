@@ -171,6 +171,11 @@ locations:
   start_norah_static:  {x: 507, y: 657, screens: [start_norah]}
   login_current_static: {x: 323, y: 125, screens: [igg_login]}
   login_use_another_static: {x: 518, y: 369, screens: [igg_login]}
+  igg_login_exit_static: {x: 1050, y: 17, screens: [igg_login]}
+  login_enter_email_static: {x: 300, y: 130, screens: [igg_login]}
+  login_enter_password: {x: 300, y: 200, screens: [igg_login]}
+  login_eye_static:    {x: 885, y: 195, screens: [igg_login]}
+  login_login_static:  {x: 462, y: 258, screens: [igg_login]}
   login_select_igg_id_static: {x: 621, y: 34, screens: [select_igg_id]}
   login_igg_id:    {x: 373, y: 161, screens: [select_igg_id]}
   system_settings_static: {x: 466, y: 248, screens: [settings]}
@@ -249,7 +254,9 @@ screens:
     description: settings menu. Account option at 218,510 (login/account switching).
     templates: [settings_title_static]
   change_account:
-    description: change-account dialog. IGG/Google/Facebook login options.
+    description: change-account options (State 2). Reachable from the account
+      page by clicking CHANGE ACCOUNT. Right side shows login-method icons;
+      the IGG account icon opens the embedded browser login page.
     templates: [igg_id_static]
   startup_expired:
     description: startup session-expired dialog with OK button.
@@ -262,8 +269,10 @@ screens:
     templates: [start_norah_static]
     advance: esc
   igg_login:
-    description: IGG login form (email/password). Identified by login_current_static.
-    templates: [login_current_static]
+    description: IGG login form in the embedded browser (email/password).
+      Identified by the browser's X (exit) button; clicking it returns to
+      the game account page.
+    templates: [igg_login_exit_static]
   select_igg_id:
     description: Select IGG ID screen. Identified by the title; the ID area marks
       where the account's ID number sits. There can be multiple IDs per account;
@@ -309,6 +318,9 @@ navigation:
     world_map:          {action: locate, name: login_igg_id}
   igg_login:
     select_igg_id:      {action: locate, name: login_login_static}
+    settings:           {action: locate, name: igg_login_exit_static}
+  change_account:
+    igg_login:          {action: locate, name: igg_account_static}
   startup_expired:
     world_map:          {action: locate, name: start_expire_ok_static}
   glory_league_event:
