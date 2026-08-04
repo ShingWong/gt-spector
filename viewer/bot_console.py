@@ -356,6 +356,9 @@ class BotConsole:
         total_mem = 0
         running_count = 0
         self._frames = {}
+        running = [b for b in self._manager.bots
+                   if b.state == BotState.RUNNING and self._tree.exists(b.name)]
+        stats_map = self._manager.get_process_stats_many(running)
         for bot in self._manager.bots:
             if not self._tree.exists(bot.name):
                 continue
@@ -376,17 +379,14 @@ class BotConsole:
                 activity = status or ""
             muted = audio.is_muted(bot.pid) if bot.pid else None
             cpu, mem, pid = "", "", ""
-            if bot.state == BotState.RUNNING:
+            s = self._manager._pid_stats_for(bot, stats_map)
+            if s:
                 running_count += 1
-                s = self._manager.get_process_stats(bot)
-                if s:
-                    cpu = f"{s['cpu_percent']:.0f}"
-                    mem = f"{s['rss_mb']}M"
-                    pid = str(s['pid'])
-                    total_cpu += s['cpu_percent']
-                    total_mem += s['rss_mb']
-                else:
-                    pid = str(bot.pid) if bot.pid else ""
+                cpu = f"{s['cpu_percent']:.0f}"
+                mem = f"{s['rss_mb']}M"
+                pid = str(s['pid'])
+                total_cpu += s['cpu_percent']
+                total_mem += s['rss_mb']
             else:
                 pid = str(bot.pid) if bot.pid else ""
             sel = "☑" if bot.name in set(self._tree.selection()) else "☐"

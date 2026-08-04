@@ -289,21 +289,68 @@ class BotManager:
     _CARD = "/sys/class/drm/card1"
 
     def get_process_stats(self, bot: Bot) -> dict[str, Any] | None:
-        pid = self._find_game_pid(bot)
+        pid = self._cached_game_pid(bot)
         if pid is None:
             return None
+        return self._ps_stats([pid]).get(pid)
+
+    def get_process_stats_many(self, bots: list[Bot]) -> dict[str, dict[str, Any]]:
+        """Stats for many bots in one `ps` call (the console poll loop)."""
+        pids = [p for p in (self._cached_game_pid(b) for b in bots) if p is not None]
+        return self._ps_stats(pids)
+
+    def _pid_stats_for(self, bot: Bot, stats_map: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
+        pid = self._cached_game_pid(bot)
+        if pid is None:
+            return None
+        return stats_map.get(str(pid))
+
+    def _ps_stats(self, pids: list[int]) -> dict[int, dict[str, Any]]:
+        if not pids:
+            return {}
         try:
             r = subprocess.run(
-                ["ps", "-p", str(pid), "-o", "%cpu=,%mem=,rss=", "--no-headers"],
+                ["ps", "-p", ",".join(str(p) for p in pids),
+                 "-o", "pid=,%cpu=,%mem=,rss=", "--no-headers"],
                 capture_output=True, text=True, timeout=5, check=False,
             )
-            parts = r.stdout.strip().split()
-            if len(parts) < 3:
-                return None
-            return {"pid": pid, "cpu_percent": float(parts[0]),
-                    "mem_percent": float(parts[1]), "rss_mb": int(parts[2]) // 1024}
-        except (subprocess.TimeoutExpired, OSError, ValueError, IndexError):
-            return None
+        except (subprocess.TimeoutExpired, OSError):
+            return {}
+        out: dict[int, dict[str, Any]] = {}
+        for line in r.stdout.splitlines():
+            parts = line.split()
+            if len(parts) < 4:
+                continue
+            try:
+                pid = int(parts[0])
+                out[pid] = {
+                    "pid": pid,
+                    "cpu_percent": float(parts[1]),
+                    "mem_percent": float(parts[2]),
+                    "rss_mb": int(parts[3]) // 1024,
+                }
+            except ValueError:
+                continue
+        return out
+
+    def _cached_game_pid(self, bot: Bot) -> int | None:
+        """Return the bot's Doomsday pid, scanning /proc only when needed.
+
+        _find_game_pid scans every /proc entry (cmdline + environ per pid),
+        which is ~120ms per call and dominates the console poll loop. Cache
+        per prefix; revalidate cheaply via _pid_alive before rescanning.
+        """
+        cache = getattr(self, "_pid_cache", None)
+        if cache is None:
+            cache = {}
+            object.__setattr__(self, "_pid_cache", cache)
+        cached = cache.get(bot.prefix)
+        if cached is not None and self._pid_alive(cached):
+            return cached
+        pid = self._find_game_pid(bot)
+        if pid is not None:
+            cache[bot.prefix] = pid
+        return pid
 
     def get_gpu_stats(self) -> dict[str, Any]:
         card = self._CARD
