@@ -12,16 +12,10 @@ trigger to open the dialog, then poll the gold help button and click.
 from __future__ import annotations
 
 import threading
-import time
 from typing import Any
 
 from gt_spector.locator import Locator
-from gt_spector.navigator import Navigator
 from gt_spector.scripts.help_loop import HelpLoop
-
-# The help trigger on the alliance menu (red when a request is active).
-TRIGGER_X = 1097
-TRIGGER_Y = 431
 
 POLL_INTERVAL = 0.1  # 100ms
 
@@ -35,7 +29,6 @@ class HelpBot:
         self._gw: Any = None
         self._session: Any = None
         self._locator = Locator()
-        self._navigator: Navigator | None = None
         self._loop = HelpLoop()
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
@@ -62,7 +55,6 @@ class HelpBot:
         self._gw = GameWorld()
         self._gw.set_locator(self._locator)
         self._session = Session(f":{display}", source=f"shm://{display}")
-        self._navigator = Navigator(self._gw, self._locator, self._session)
         self._loop = HelpLoop()
         self._status = "starting"
 
@@ -106,31 +98,8 @@ class HelpBot:
             self._status = result or "idle"
 
     def _navigate_to_help_dialog(self) -> None:
-        nav = self._navigator
-        if nav is None:
-            nav = Navigator(self._gw, self._locator, self._session)
-            self._navigator = nav
-        self._session.refresh()
-        screen = self._gw.identify(self._session)
-        if screen == "help_dialog":
-            self._status = "navigated"
-            return
-        if screen is None:
-            self._status = "unknown_screen"
-            return
-        if screen != "alliance_menu":
-            result = nav.goto("alliance_menu")
-            if result != "alliance_menu":
-                self._status = "nav_failed"
-                return
-            time.sleep(0.5)
-            self._session.refresh()
-        r, g, b = self._session.get_pixel(TRIGGER_X, TRIGGER_Y)
-        if r >= 120 and g <= 90 and b <= 90:
-            self._session.click(TRIGGER_X, TRIGGER_Y)
-            time.sleep(0.3)
-            self._session.refresh()
-        self._status = "navigated"
+        from gt_spector.scripts.help_nav import navigate_to_help_dialog
+        self._status = navigate_to_help_dialog(self._gw, self._locator, self._session)
 
     # Compatibility with ScriptRunner tick(frame) signature.
     def tick(self, frame: Any = None) -> str | None:
