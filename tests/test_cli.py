@@ -77,20 +77,22 @@ class FakeFrameSession:
             return (200, 0, 0)
         if (x, y) == (966, 253):
             return (0, 0, 0)
-        if (x, y) == (858, 310):
+        if (x, y) == (858, 363):
             return (self.mid_r, 79, 54)
-        if (x, y) == (973, 310):
+        if (x, y) == (973, 363):
             return (self.high_r, 114, 76)
         return (0, 0, 0)
     def click(self, x, y):
         self.clicks.append((x, y))
-        if (x, y) == (858, 310):
-            self.mid_r = 109
-        elif (x, y) == (973, 310):
-            self.high_r = 150
-        elif (x, y) == (745, 310):
-            self.mid_r = 54
-            self.high_r = 52
+        if (x, y) == (858, 363):
+            self.mid_r = 77
+            self.high_r = 38
+        elif (x, y) == (973, 363):
+            self.mid_r = 156
+            self.high_r = 96
+        elif (x, y) == (745, 363):
+            self.mid_r = 38
+            self.high_r = 38
     def refresh(self):
         pass
     def move_mouse(self, x, y):
@@ -101,17 +103,17 @@ class FakeFrameSession:
 
 def test_read_frame_rate_high():
     from viewer.cli import read_frame_rate
-    assert read_frame_rate(FakeFrameSession(mid_r=165, high_r=150)) == "high"
+    assert read_frame_rate(FakeFrameSession(mid_r=156, high_r=96)) == "high"
 
 
 def test_read_frame_rate_mid():
     from viewer.cli import read_frame_rate
-    assert read_frame_rate(FakeFrameSession(mid_r=109, high_r=52)) == "mid"
+    assert read_frame_rate(FakeFrameSession(mid_r=77, high_r=38)) == "mid"
 
 
 def test_read_frame_rate_low():
     from viewer.cli import read_frame_rate
-    assert read_frame_rate(FakeFrameSession(mid_r=54, high_r=52)) == "low"
+    assert read_frame_rate(FakeFrameSession(mid_r=38, high_r=38)) == "low"
 
 
 def test_set_frame_rate_cycles(monkeypatch):
@@ -120,9 +122,9 @@ def test_set_frame_rate_cycles(monkeypatch):
     # low state: mid dark, high dark
     s = FakeFrameSession(mid_r=54, high_r=52)
     assert cli_mod.set_frame_rate(s, "mid") == "mid"
-    assert (858, 310) in s.clicks
+    assert (858, 363) in s.clicks
     assert cli_mod.set_frame_rate(s, "high") == "high"
-    assert (973, 310) in s.clicks
+    assert (973, 363) in s.clicks
 
 
 def test_in_game_settings_registry():

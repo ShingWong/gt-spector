@@ -15,9 +15,9 @@ GQ_HIGH = (966, 253)
 GQ_HIGH_BRIGHT_R = 80
 GQ_SETTLE = 2.0
 
-FR_LOW = (745, 310)
-FR_MID = (858, 310)
-FR_HIGH = (973, 310)
+FR_LOW = (745, 363)
+FR_MID = (858, 363)
+FR_HIGH = (973, 363)
 
 SOUND_OFF = (906, 532)
 SOUND_ON = (955, 532)
@@ -88,10 +88,9 @@ def set_graphics_quality(session: Any, target: str) -> str:
 
 def read_frame_rate(session: Any) -> str:
     mid_r, _, _ = session.get_pixel(*FR_MID)
-    high_r, _, _ = session.get_pixel(*FR_HIGH)
-    if high_r >= 120:
+    if mid_r >= 120:
         return "high"
-    if mid_r >= 90:
+    if mid_r >= 60:
         return "mid"
     return "low"
 
