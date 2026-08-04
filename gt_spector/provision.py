@@ -183,11 +183,13 @@ def _apply_standard_settings(name: str, dest: str) -> None:
         display = 9
     bot = _Bot(name=name, prefix=dest, display=display)
     manager = _Manager()
-    manager.start_game(bot)
-    print(f"Applying standard in-game settings on :{display}...")
-    _wait_for_game(bot)
-    _run_settings_apply(display)
-    manager.stop_game(bot)
+    try:
+        manager.start_game(bot)
+        print(f"Applying standard in-game settings on :{display}...")
+        _wait_for_game(bot)
+        _run_settings_apply(display)
+    finally:
+        manager.stop_game(bot)
 
 
 def _Bot(name: str, prefix: str, display: int):
