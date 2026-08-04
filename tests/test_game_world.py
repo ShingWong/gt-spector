@@ -36,7 +36,7 @@ def test_login_screen_states_identify_uniquely():
         "igg_login": {"igg_login_exit_static", "login_enter_email_static"},
         "igg_login_success": {"igg_login_exit_static", "login_ok_currently_static"},
         "select_igg_id": {"igg_login_exit_static", "login_select_igg_id_static"},
-        "igg_id_confirm": {"igg_login_exit_static", "login_confirm_igg_id_static"},
+        "igg_id_confirm": {"login_confirm_igg_id_static"},
     }
     for expected, present in cases.items():
         gw.set_locator(_FakeLocator(present))

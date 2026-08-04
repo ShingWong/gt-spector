@@ -269,14 +269,14 @@ class CliSession(cmd.Cmd):
         raise RuntimeError(f"no bot for display :{self._display}")
 
     def do_change_account(self, arg: str) -> None:
-        """change-account <email> [password] — log this bot into an IGG account.
+        """change_account <email> [password] — log this bot into an IGG account.
 
         Drives the full embedded-browser login flow, pausing to confirm each
         step. Password defaults to the farm default if not given.
         """
         args = shlex.split(arg)
         if not args:
-            print("Usage: change-account <email> [password]")
+            print("Usage: change_account <email> [password]")
             return
         email = args[0]
         password = args[1] if len(args) > 1 else "bamboo-H4"
@@ -295,7 +295,7 @@ class CliSession(cmd.Cmd):
             prefix, f":{self._display}", confirm=confirm,
         )
         result = flow.change_account(email, password)
-        print(f"change-account result: {result}")
+        print(f"change_account result: {result}")
 
     def do_where(self, arg: str) -> None:
         """where — identify the current screen"""
