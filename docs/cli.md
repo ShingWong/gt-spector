@@ -86,3 +86,23 @@ Valid keys and values:
 Settings are applied via deterministic pixel-color detection (no VLM). New
 settings are added to the `IN_GAME_SETTINGS` registry in `viewer/cli.py`.
 Unknown keys or invalid values exit with an error listing the valid options.
+
+## Standard Bot Configuration
+
+Every bot is initialized with the following in-game settings:
+
+| Setting          | Value |
+|------------------|-------|
+| graphics-quality | low   |
+| frame-rate       | low   |
+| sound-effects    | off   |
+| background-music | off   |
+
+Apply to a bot (e.g. bot02 on :11):
+
+```
+python -m gt_spector --session :11 --in-game-settings \
+  "graphics-quality=low,frame-rate=low,sound-effects=off,background-music=off"
+```
+
+Run this during provisioning (or after a Wine-prefix rebuild) for each bot.

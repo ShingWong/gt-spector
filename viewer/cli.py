@@ -24,6 +24,48 @@ SOUND_ON = (955, 532)
 MUSIC_OFF = (906, 638)
 MUSIC_ON = (955, 638)
 
+SETTINGS_SCROLL_POINT = (600, 400)
+SETTINGS_MAX_SCROLLS = 30
+SETTINGS_SCROLL_SETTLE = 0.8
+
+
+def ensure_settings_row(session: Any, position: str) -> bool:
+    """Scroll the system settings list to the hard stop for the target group.
+
+    position "top" targets the graphics-quality/frame-rate rows, "bottom"
+    the sound-effects/background-music rows. The list has no scrollbar and a
+    hard stop at each end, so we scroll until the frame stops changing.
+    """
+    if position == "top":
+        sentinels = (GQ_LOW, GQ_HIGH)
+        direction = 1
+    elif position == "bottom":
+        sentinels = (SOUND_OFF, SOUND_ON)
+        direction = -1
+    else:
+        raise ValueError(f"unknown settings row position: {position}")
+    import time
+    session.move_mouse(*SETTINGS_SCROLL_POINT)
+    if any(session.get_pixel(x, y)[0] > 80 for x, y in sentinels):
+        return True
+    prev = None
+    stable = 0
+    for _ in range(SETTINGS_MAX_SCROLLS):
+        session.scroll(direction, 3)
+        time.sleep(SETTINGS_SCROLL_SETTLE)
+        session.refresh()
+        cur = session.frame
+        if prev is not None:
+            diff = (cur.astype(int) - prev.astype(int)).__abs__().sum()
+            if diff < 500000:
+                stable += 1
+                if stable >= 2:
+                    break
+                prev = cur
+                continue
+        prev = cur
+    return any(session.get_pixel(x, y)[0] > 80 for x, y in sentinels)
+
 
 def read_graphics_quality(session: Any) -> str:
     r, _, _ = session.get_pixel(*GQ_HIGH)
@@ -31,6 +73,8 @@ def read_graphics_quality(session: Any) -> str:
 
 
 def set_graphics_quality(session: Any, target: str) -> str:
+    if not ensure_settings_row(session, "top"):
+        return "unreachable"
     current = read_graphics_quality(session)
     if current == target:
         return current
@@ -53,6 +97,8 @@ def read_frame_rate(session: Any) -> str:
 
 
 def set_frame_rate(session: Any, target: str) -> str:
+    if not ensure_settings_row(session, "top"):
+        return "unreachable"
     current = read_frame_rate(session)
     if current == target:
         return current
@@ -70,6 +116,8 @@ def read_sound_effects(session: Any) -> str:
 
 
 def set_sound_effects(session: Any, target: str) -> str:
+    if not ensure_settings_row(session, "bottom"):
+        return "unreachable"
     current = read_sound_effects(session)
     if current == target:
         return current
@@ -87,6 +135,8 @@ def read_background_music(session: Any) -> str:
 
 
 def set_background_music(session: Any, target: str) -> str:
+    if not ensure_settings_row(session, "bottom"):
+        return "unreachable"
     current = read_background_music(session)
     if current == target:
         return current

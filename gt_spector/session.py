@@ -57,6 +57,10 @@ class Session:
         self._check_attached()
         self._input.click(x, y, speed)
 
+    def scroll(self, direction: int, amount: int = 1) -> None:
+        self._check_attached()
+        self._input.scroll(direction, amount)
+
     def drag(self, x1: int, y1: int, x2: int, y2: int, speed: float = 400) -> None:
         self._check_attached()
         self._input.drag(x1, y1, x2, y2, speed)
