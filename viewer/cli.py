@@ -6,8 +6,10 @@ from typing import Any
 
 from PIL import Image
 
+from gt_spector.bot_manager import BotManager
 from gt_spector.game_world import GameWorld
 from gt_spector.locator import Locator
+from gt_spector.login_flow import LoginFlow
 from gt_spector.navigator import Navigator
 
 GQ_LOW = (825, 253)
@@ -257,6 +259,43 @@ class CliSession(cmd.Cmd):
 
     def _display_num(self) -> int:
         return self._display
+
+    def _bot_prefix(self) -> str:
+        m = BotManager()
+        m.load_from_prefixes()
+        for b in m.bots:
+            if b.display == self._display:
+                return b.prefix
+        raise RuntimeError(f"no bot for display :{self._display}")
+
+    def do_change_account(self, arg: str) -> None:
+        """change-account <email> [password] — log this bot into an IGG account.
+
+        Drives the full embedded-browser login flow, pausing to confirm each
+        step. Password defaults to the farm default if not given.
+        """
+        args = shlex.split(arg)
+        if not args:
+            print("Usage: change-account <email> [password]")
+            return
+        email = args[0]
+        password = args[1] if len(args) > 1 else "bamboo-H4"
+
+        def confirm(msg: str) -> bool:
+            ans = input(f"  [confirm] {msg}? [y/N] ").strip().lower()
+            return ans in ("y", "yes")
+
+        try:
+            prefix = self._bot_prefix()
+        except RuntimeError as e:
+            print(f"error: {e}")
+            return
+        flow = LoginFlow(
+            self._session, self._gw, self._locator,
+            prefix, f":{self._display}", confirm=confirm,
+        )
+        result = flow.change_account(email, password)
+        print(f"change-account result: {result}")
 
     def do_where(self, arg: str) -> None:
         """where — identify the current screen"""

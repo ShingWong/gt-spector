@@ -21,6 +21,29 @@ def test_cli_navigation_commands_exist():
         assert hasattr(cli, f"do_{cmd}"), f"missing do_{cmd}"
 
 
+def test_do_change_account_wires_flow(monkeypatch):
+    from viewer import cli as cli_mod
+
+    calls = {}
+    class FakeFlow:
+        def __init__(self, *a, **k):
+            calls["kwargs"] = k
+        def change_account(self, email, password):
+            calls["account"] = (email, password)
+            return "shelter_view"
+
+    monkeypatch.setattr(cli_mod, "LoginFlow", FakeFlow)
+    s = object.__new__(cli_mod.CliSession)
+    s._session = type("S", (), {"display": ":13"})()
+    s._display = 13
+    s._gw = object()
+    s._locator = object()
+    monkeypatch.setattr(s, "_bot_prefix", lambda: "/home/swong/dls/wineprefix_bots/bot04")
+    s.do_change_account("sr02-07@mx1.us bamboo-H4")
+    assert calls["account"] == ("sr02-07@mx1.us", "bamboo-H4")
+    assert "confirm" in calls["kwargs"]
+
+
 def test_cli_go_parses_verbose_flag(monkeypatch):
     from viewer import cli as cli_mod
 
