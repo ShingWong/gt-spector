@@ -36,6 +36,24 @@ def _make_vlm() -> Any:
     return _VlmAdapter(vlm)
 
 
+class _FrameSession:
+    """Minimal frame-only object for GameWorld.identify (frame + get_pixel).
+
+    Avoids constructing a real Session (which attaches an X input) on every
+    poll; the console already has the frame in hand.
+    """
+
+    def __init__(self, frame: Any) -> None:
+        self._frame = frame
+
+    @property
+    def frame(self) -> Any:
+        return self._frame
+
+    def get_pixel(self, x: int, y: int) -> tuple[int, int, int]:
+        return tuple(int(v) for v in self._frame[y, x, :3])
+
+
 class BotConsole:
     def __init__(self) -> None:
         self._manager = BotManager()
@@ -47,6 +65,11 @@ class BotConsole:
         self._vlm_screens: dict[str, str] = {}
         self._sound_applied: dict[str, int] = {}
         self._vlm_stop = False
+        from gt_spector.game_world import GameWorld
+        from gt_spector.locator import Locator
+        self._gw = GameWorld()
+        self._locator = Locator()
+        self._gw.set_locator(self._locator)
 
         self._tk = tk.Tk()
         self._tk.title("gt-spector — Bot Console")
@@ -295,16 +318,10 @@ class BotConsole:
         loc = monitor.detect_screen(frame, self._nav_table())
         if loc is not None:
             return loc
-        # Fall back to the deterministic game-world identification system.
+        # Fall back to the deterministic game-world identification system,
+        # reusing the shared GameWorld/Locator and the frame already read.
         try:
-            from gt_spector.game_world import GameWorld
-            from gt_spector.locator import Locator
-            from gt_spector.session import Session
-
-            gw = GameWorld()
-            gw.set_locator(Locator())
-            session = Session(f":{bot.display}", source=f"shm://{bot.display}")
-            identified = gw.identify(session)
+            identified = self._gw.identify(_FrameSession(frame))
             if identified:
                 return identified
         except Exception:  # noqa: BLE001, S110
