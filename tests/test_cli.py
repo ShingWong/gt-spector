@@ -169,12 +169,12 @@ class FakeToggleSession:
 
 def test_read_sound_effects_off():
     from viewer.cli import read_sound_effects
-    assert read_sound_effects(FakeToggleSession(on_r=121)) == "off"
+    assert read_sound_effects(FakeToggleSession(on_r=57)) == "off"
 
 
 def test_read_sound_effects_on():
     from viewer.cli import read_sound_effects
-    assert read_sound_effects(FakeToggleSession(on_r=57)) == "on"
+    assert read_sound_effects(FakeToggleSession(on_r=121)) == "on"
 
 
 def test_read_background_music_off():
@@ -190,7 +190,7 @@ def test_read_background_music_on():
 def test_set_sound_effects(monkeypatch):
     from viewer import cli as cli_mod
     monkeypatch.setattr(cli_mod, "GQ_SETTLE", 0.0)
-    s = FakeToggleSession(on_r=57)  # currently on
+    s = FakeToggleSession(on_r=121)  # currently on
     assert cli_mod.set_sound_effects(s, "off") == "off"
     assert (906, 532) in s.clicks
 

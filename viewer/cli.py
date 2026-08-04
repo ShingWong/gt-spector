@@ -112,7 +112,7 @@ def set_frame_rate(session: Any, target: str) -> str:
 
 def read_sound_effects(session: Any) -> str:
     r, _, _ = session.get_pixel(*SOUND_ON)
-    return "off" if r >= 80 else "on"
+    return "on" if r >= 80 else "off"
 
 
 def set_sound_effects(session: Any, target: str) -> str:
