@@ -15,6 +15,7 @@ from gt_spector.bot_manager import Bot, BotManager, BotState
 from gt_spector.monitor import BotMonitor
 from gt_spector.script import ScriptRunner
 from gt_spector.scripts.help_bot import HelpBot
+from gt_spector.scripts.navigate_bot import NavigateBot
 
 
 class _VlmAdapter:
@@ -161,6 +162,8 @@ class BotConsole:
         script_menu = tk.Menu(menubar, tearoff=0)
         script_menu.add_command(label="Start Help Bot", command=self._start_help_bot)
         script_menu.add_command(label="Stop Help Bot", command=self._stop_help_bots)
+        script_menu.add_separator()
+        script_menu.add_command(label="Navigate to Help Dialog", command=self._navigate_to_help_dialog)
         menubar.add_cascade(label="Scripts", menu=script_menu)
 
         overlay_menu = tk.Menu(menubar, tearoff=0)
@@ -612,6 +615,18 @@ class BotConsole:
             if runner:
                 runner.stop()
         self._status.config(text="Help bots stopped")
+
+    def _navigate_to_help_dialog(self) -> None:
+        for bot in self._get_checked():
+            old = self._runners.pop(bot.name, None)
+            if old:
+                old.stop()
+            self._status.config(text=f"Navigating {bot.name} to help dialog...")
+            self._tk.update()
+            nav = NavigateBot()
+            nav.start(bot.display)
+            self._runners[bot.name] = nav
+            self._status.config(text=f"{bot.name}: {nav.status}")
 
     def _stop_scripts(self) -> None:
         for bot in self._get_checked():
