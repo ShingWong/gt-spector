@@ -172,8 +172,8 @@ locations:
   login_current_static: {x: 323, y: 125, screens: [igg_login]}
   login_use_another_static: {x: 518, y: 369, screens: [igg_login]}
   igg_login_exit_static: {x: 1050, y: 17, screens: [igg_login]}
-  login_enter_email_static: {x: 300, y: 130, screens: [igg_login]}
-  login_enter_password: {x: 300, y: 200, screens: [igg_login]}
+  login_enter_email_static: {x: 365, y: 156, screens: [igg_login]}
+  login_enter_password: {x: 365, y: 226, screens: [igg_login]}
   login_eye_static:    {x: 885, y: 195, screens: [igg_login]}
   login_login_static:  {x: 462, y: 258, screens: [igg_login]}
   login_select_igg_id_static: {x: 621, y: 34, screens: [select_igg_id]}
