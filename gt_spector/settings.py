@@ -23,6 +23,7 @@ DEFAULT_LOG_MAX_BYTES = 512 * 1024
 DEFAULT_SOUND_MODE = "viewer"
 DEFAULT_VLM_INTERVAL = 10.0
 DEFAULT_VLM_DOWNSCALE = 2
+DEFAULT_VLM_ENABLED = False
 
 
 def load_json(path: Path, default: dict[str, Any]) -> dict[str, Any]:
@@ -129,3 +130,14 @@ def vlm_downscale() -> int:
 
 def set_vlm_downscale(factor: int) -> None:
     set_global(vlm_downscale=max(1, int(factor)))
+
+
+def vlm_enabled() -> bool:
+    try:
+        return bool(get_global().get("vlm_enabled", DEFAULT_VLM_ENABLED))
+    except (TypeError, ValueError):
+        return DEFAULT_VLM_ENABLED
+
+
+def set_vlm_enabled(enabled: bool) -> None:
+    set_global(vlm_enabled=bool(enabled))

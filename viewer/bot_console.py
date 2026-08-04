@@ -59,7 +59,8 @@ class BotConsole:
 
         self._poll()
         self._tk.protocol("WM_DELETE_WINDOW", self._on_close)
-        self._start_vlm_worker()
+        if settings.vlm_enabled():
+            self._start_vlm_worker()
 
     def _geometry_path(self) -> Path:
         return Path.home() / ".config" / "gt-spector" / "console_geometry.json"

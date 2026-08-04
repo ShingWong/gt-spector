@@ -18,6 +18,7 @@ def test_defaults_when_missing(cfg):
     assert cfg.log_max_bytes() == 512 * 1024
     assert cfg.vlm_interval() == 10.0
     assert cfg.vlm_downscale() == 2
+    assert cfg.vlm_enabled() is False
 
 
 def test_global_roundtrip(cfg):
@@ -51,6 +52,14 @@ def test_vlm_downscale_roundtrip(cfg):
     assert cfg.vlm_downscale() == 2
     cfg.set_vlm_downscale(4)
     assert cfg.vlm_downscale() == 4
+
+
+def test_vlm_enabled_roundtrip(cfg):
+    assert cfg.vlm_enabled() is False
+    cfg.set_vlm_enabled(True)
+    assert cfg.vlm_enabled() is True
+    cfg.set_vlm_enabled(False)
+    assert cfg.vlm_enabled() is False
 
 
 def test_log_size_roundtrip(cfg):

@@ -414,6 +414,37 @@ def test_nav_table_missing(tmp_path, monkeypatch):
     assert make_console()._nav_table() == {"states": {}}
 
 
+def test_vlm_worker_start_gated_by_setting(monkeypatch, tmp_path):
+    from gt_spector import settings as real_settings
+    from viewer import bot_console as bc
+
+    monkeypatch.setattr(real_settings, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(real_settings, "GLOBAL_PATH", tmp_path / "settings.json")
+    monkeypatch.setattr(real_settings, "BOTS_DIR", tmp_path / "bots")
+
+    started: list[bool] = []
+
+    def fake_start(self) -> None:
+        started.append(True)
+
+    monkeypatch.setattr(bc.BotConsole, "_start_vlm_worker", fake_start)
+
+    # disabled (default) -> worker not started
+    c = object.__new__(bc.BotConsole)
+    c._vlm_stop = False
+    if bc.settings.vlm_enabled():
+        c._start_vlm_worker()
+    assert started == []
+
+    # enabled -> worker started
+    bc.settings.set_vlm_enabled(True)
+    c2 = object.__new__(bc.BotConsole)
+    c2._vlm_stop = False
+    if bc.settings.vlm_enabled():
+        c2._start_vlm_worker()
+    assert started == [True]
+
+
 def test_nav_table_parse(tmp_path, monkeypatch):
     from pathlib import Path
 
