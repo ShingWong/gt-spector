@@ -105,7 +105,9 @@ python -m gt_spector --session :11 --in-game-settings \
   "graphics-quality=low,frame-rate=low,sound-effects=off,background-music=off"
 ```
 
-Run this during provisioning (or after a Wine-prefix rebuild) for each bot.
+`provision.py init` applies this automatically when a new bot is provisioned
+(start the game, set the config, stop the game). Run the command manually
+after a Wine-prefix rebuild or if a bot's settings drifted.
 
 ## Change Account
 
