@@ -10,3 +10,47 @@ def test_login_field_locations_present():
         loc = gw.locations.get(name)
         assert loc is not None, f"missing {name}"
         assert (loc["x"], loc["y"]) == coords, f"{name} at {coords}"
+
+
+class _FakeLocate:
+    def __init__(self, found: bool):
+        self.found = found
+        self.cx = 0
+        self.cy = 0
+        self.score = 1.0
+
+
+class _FakeLocator:
+    def __init__(self, present: set[str]):
+        self._present = present
+
+    def find(self, frame, name):
+        return _FakeLocate(name in self._present)
+
+
+def test_login_screen_states_identify_uniquely():
+    from gt_spector.game_world import GameWorld
+    gw = GameWorld()
+    session = type("S", (), {"frame": None})()
+    cases = {
+        "igg_login": {"igg_login_exit_static", "login_enter_email_static"},
+        "igg_login_success": {"igg_login_exit_static", "login_ok_currently_static"},
+        "select_igg_id": {"igg_login_exit_static", "login_select_igg_id_static"},
+        "igg_id_confirm": {"igg_login_exit_static", "login_confirm_igg_id_static"},
+    }
+    for expected, present in cases.items():
+        gw.set_locator(_FakeLocator(present))
+        assert gw.identify(session) == expected
+
+
+def test_login_screen_templates_exist_in_store():
+    from gt_spector import templates as _t
+    names = {
+        "igg_login_exit_static",
+        "login_enter_email_static",
+        "login_ok_currently_static",
+        "login_select_igg_id_static",
+        "login_confirm_igg_id_static",
+    }
+    available = {t.name for t in _t.load_templates()}
+    assert names <= available

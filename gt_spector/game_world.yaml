@@ -178,6 +178,8 @@ locations:
   login_login_static:  {x: 462, y: 258, screens: [igg_login]}
   login_select_igg_id_static: {x: 621, y: 34, screens: [select_igg_id]}
   login_igg_id:    {x: 373, y: 161, screens: [select_igg_id]}
+  login_continue:  {x: 500, y: 300, screens: [igg_login_success]}
+  login_confirm_ok: {x: 700, y: 560, screens: [igg_id_confirm]}
   system_settings_static: {x: 466, y: 248, screens: [settings]}
   system_settings_title_static: {x: 546, y: 143, screens: [system_settings]}
   system_settings_exit_static: {x: 1007, y: 143, screens: [system_settings]}
@@ -272,14 +274,22 @@ screens:
     advance: esc
   igg_login:
     description: IGG login form in the embedded browser (email/password).
-      Identified by the browser's X (exit) button; clicking it returns to
-      the game account page.
-    templates: [igg_login_exit_static]
+      Identified by the browser's X (exit) button plus the email placeholder;
+      clicking X returns to the game account page.
+    templates: [igg_login_exit_static, login_enter_email_static]
+  igg_login_success:
+    description: IGG login success page (logged-in banner). Identified by the
+      browser's X plus the success text; Continue leads to the ID select page.
+    templates: [igg_login_exit_static, login_ok_currently_static]
   select_igg_id:
     description: Select IGG ID screen. Identified by the title; the ID area marks
-      where the account's ID number sits. There can be multiple IDs per account;
-      the FIRST ID is always in the login_igg_id area. Click it to finish login.
+      where the account's ID number sits. All farm accounts have exactly one ID,
+      always in the login_igg_id area. Click it to finish login.
     templates: [login_select_igg_id_static]
+  igg_id_confirm:
+    description: IGG ID confirm dialog. Identified by the browser's X plus the
+      confirm text; OK finishes the login and loads the game.
+    templates: [igg_login_exit_static, login_confirm_igg_id_static]
   account:
     description: account management menu. CHANGE ACCOUNT at 573,660.
     templates: [account_title_static]
@@ -320,7 +330,11 @@ navigation:
     world_map:          {action: locate, name: login_igg_id}
   igg_login:
     select_igg_id:      {action: locate, name: login_login_static}
-    settings:           {action: locate, name: igg_login_exit_static}
+    account:            {action: locate, name: igg_login_exit_static}
+  igg_login_success:
+    select_igg_id:      {action: click, location: login_continue}
+  igg_id_confirm:
+    shelter_view:       {action: click, location: login_confirm_ok}
   change_account:
     igg_login:          {action: locate, name: igg_account_static}
   startup_expired:

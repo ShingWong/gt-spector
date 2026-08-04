@@ -1,9 +1,11 @@
 """Automated IGG browser login for a bot (change account).
 
-Verified live on bot04 (2026-08-04). Coordinates are window-relative;
-screen clicks add the (+3,+29) window offset. Typing uses the one-shot
-sendtext.exe helper. Each step can be confirmed/rejected via the `confirm`
-hook; during development the CLI wires it to a prompt.
+Verified live on bot04 (2026-08-04). All coordinates are client/frame
+relative throughout the codebase, and the headless bots run under Xvfb with
+no window manager, so client coords coincide with screen coords. Typing uses
+the one-shot sendtext.exe helper, whose SetCursorPos is also screen-absolute.
+Each step can be confirmed/rejected via the `confirm` hook; during development
+the CLI wires it to a prompt.
 """
 
 from __future__ import annotations
@@ -13,6 +15,7 @@ from collections.abc import Callable
 from typing import Any
 
 from gt_spector import typing
+from gt_spector.game_world import GameWorld
 
 EMAIL = (365, 156)
 PASSWORD = (365, 226)
@@ -21,14 +24,13 @@ LOGIN_BTN = (462, 258)
 CONTINUE = (500, 300)
 SELECT_ID = (350, 165)
 OK = (700, 560)
-WIN_OFFSET = (3, 29)
 
 
 class LoginFlow:
     def __init__(
         self,
         session: Any,
-        gw: Any,
+        gw: GameWorld,
         locator: Any,
         prefix: str,
         display: str,
@@ -41,8 +43,9 @@ class LoginFlow:
         self._display = display
         self._confirm = confirm or (lambda _msg: True)
 
-    def _window_click(self, x: int, y: int) -> None:
-        self._session.click(x + WIN_OFFSET[0], y + WIN_OFFSET[1])
+    def _window_click(self, x: int, y: int) -> bool:
+        self._session.click(x, y)
+        return True
 
     def _type(self, text: str, x: int, y: int) -> bool:
         return typing.type_at(self._prefix, self._display, f"{{CtrlA}}{text}", x, y)
@@ -56,15 +59,17 @@ class LoginFlow:
         from gt_spector.navigator import Navigator
         nav = Navigator(gw, self._locator, self._session)
 
-        steps = [
+        steps: list[tuple[str, Callable[[], bool]]] = [
             ("navigate", lambda: nav.goto("change_account") is not None),
             ("open igg browser", self._open_igg_browser),
             ("enter email", lambda: self._type(email, *EMAIL)),
             ("enter password", lambda: self._type(password, *PASSWORD)),
-            ("reveal password", lambda: self._window_click(*EYE) or True),
+            ("reveal password", lambda: self._window_click(*EYE)),
+            ("hide password", lambda: self._window_click(*EYE)),
             ("submit login", self._submit_login),
+            ("continue after login", lambda: self._window_click(*CONTINUE)),
             ("select id", self._select_id),
-            ("confirm ok", lambda: self._window_click(*OK) or True),
+            ("confirm ok", lambda: self._window_click(*OK)),
         ]
         for label, fn in steps:
             if not self._confirm(label):
@@ -75,7 +80,6 @@ class LoginFlow:
         return gw.identify(self._session) or "unknown"
 
     def _open_igg_browser(self) -> bool:
-        # on change_account state 2, IGG icon at (735,262) window-relative
         self._window_click(735, 262)
         self._wait(6)
         return True

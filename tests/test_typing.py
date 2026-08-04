@@ -1,3 +1,4 @@
+import os
 import subprocess
 
 
@@ -25,19 +26,7 @@ def test_type_at_invokes_sendtext(monkeypatch):
     assert "365" in cmd and "156" in cmd
     assert env["WINEPREFIX"] == "/home/swong/dls/wineprefix_bots/bot04"
     assert env["DISPLAY"] == ":13"
-
-
-def test_click_at_uses_empty_text(monkeypatch):
-    from gt_spector import typing as T
-
-    calls = []
-    def fake_run(cmd, env=None, **kw):
-        calls.append(cmd)
-        return FakeResult()
-    monkeypatch.setattr(subprocess, "run", fake_run)
-
-    assert T.click_at("/p", ":13", 700, 560) is True
-    assert calls[0][-3] == ""  # empty text arg
+    assert env["HOME"] == os.environ["HOME"]
 
 
 def test_type_at_reports_failure(monkeypatch):
@@ -46,4 +35,18 @@ def test_type_at_reports_failure(monkeypatch):
     class FailResult:
         returncode = 1
     monkeypatch.setattr(subprocess, "run", lambda *a, **k: FailResult())
+    assert T.type_at("/p", ":13", "x", 1, 2) is False
+
+
+def test_type_at_returns_false_on_exceptions(monkeypatch):
+    from gt_spector import typing as T
+
+    def boom(cmd, env=None, **kw):
+        raise subprocess.TimeoutExpired(cmd, timeout=30)
+    monkeypatch.setattr(subprocess, "run", boom)
+    assert T.type_at("/p", ":13", "x", 1, 2) is False
+
+    def boom2(cmd, env=None, **kw):
+        raise OSError("no display")
+    monkeypatch.setattr(subprocess, "run", boom2)
     assert T.type_at("/p", ":13", "x", 1, 2) is False

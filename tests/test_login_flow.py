@@ -28,12 +28,39 @@ class FakeSession:
         self.clicks.append((x, y))
 
 
-def test_window_click_offsets_by_3_29():
+def test_window_click_uses_client_coords():
     s = FakeSession()
     gw = FakeGW()
     flow = LoginFlow(s, gw, None, "/p", ":13", confirm=lambda m: True)
     flow._window_click(100, 200)
-    assert s.clicks == [(103, 229)]
+    assert s.clicks == [(100, 200)]
+
+
+def test_change_account_full_sequence(monkeypatch):
+    import gt_spector.login_flow as L
+    import gt_spector.typing as T
+
+    s = FakeSession()
+    gw = FakeGW()
+    seen = []
+    def confirm(msg):
+        seen.append(msg)
+        return True
+    flow = LoginFlow(s, gw, None, "/p", ":13", confirm=confirm)
+    monkeypatch.setattr(T, "type_at", lambda *a, **k: True)
+    monkeypatch.setattr(L.time, "sleep", lambda *a, **k: None)
+
+    result = flow.change_account("a@b.c", "pw")
+    assert result == "change_account"
+    assert seen == [
+        "navigate", "open igg browser", "enter email", "enter password",
+        "reveal password", "hide password", "submit login",
+        "continue after login", "select id", "confirm ok",
+    ]
+    assert s.clicks == [
+        (735, 262), (885, 195), (885, 195), (462, 258),
+        (500, 300), (350, 165), (700, 560),
+    ]
 
 
 def test_change_account_stops_on_rejected_confirm(monkeypatch):
