@@ -106,3 +106,20 @@ python -m gt_spector --session :11 --in-game-settings \
 ```
 
 Run this during provisioning (or after a Wine-prefix rebuild) for each bot.
+
+## Change Account
+
+Switch a bot to a specific IGG account via the embedded browser login.
+
+  python -m gt_spector --session :<display> --cli
+  > change-account sr02-07@mx1.us
+
+The command walks the full login flow: Settings -> Account -> Change Account
+-> IGG Account -> browser login form. It pauses at each step and asks you to
+confirm the screen before continuing. Type the password when prompted, or
+pass it as the second argument.
+
+Relies on deterministic template identification (no VLM) and the
+sendtext.exe Wine helper for reliable typing of '@' and uppercase.
+Account passwords are in /home/swong/dls/src/ahk/accounts
+(email:password per line).

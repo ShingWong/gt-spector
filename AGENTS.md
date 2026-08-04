@@ -63,6 +63,9 @@ For one-shot initialization of game options (or after Wine-prefix rebuilds):
 `python -m gt_spector --session :<display> --in-game-settings "graphics-quality=low"`
 (see `docs/cli.md` "In-Game Settings").
 
+To switch a bot's IGG account:
+`change-account <email> [password]` in the CLI (see docs/cli.md "Change Account").
+
 ## Code Style
 
 - Python: ruff + mypy strict
