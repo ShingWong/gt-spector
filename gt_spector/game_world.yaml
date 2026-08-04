@@ -219,8 +219,10 @@ map_levels:
 # Screens with stable anchor fingerprints (captured live, refined over time).
 screens:
   shelter_view:
-    description: shelter/base view. Identified by avatar border + region_static icon.
-    templates: [avatar, region_static]
+    description: shelter/base view. Identified by the region icon (unique to
+      this screen; the avatar border match was dropped as unreliable across
+      accounts).
+    templates: [region_static]
   bag_menu:
     description: bag/inventory menu. Not yet broken down.
     templates: []

@@ -645,7 +645,7 @@
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
     "reader": "vlm",
-    "fixed": false
+    "fixed": true
   },
   {
     "name": "alliance_title_static",
@@ -750,6 +750,54 @@
     "y": 657,
     "w": 106,
     "h": 14,
+    "game_version": "Doomsday_1.59.0",
+    "score_threshold": 0.75,
+    "reader": "vlm",
+    "fixed": false
+  },
+  {
+    "name": "igg_login_exit_static",
+    "shape": "rect",
+    "x": 1050,
+    "y": 17,
+    "w": 29,
+    "h": 32,
+    "game_version": "Doomsday_1.59.0",
+    "score_threshold": 0.75,
+    "reader": "vlm",
+    "fixed": false
+  },
+  {
+    "name": "login_ok_currently_static",
+    "shape": "rect",
+    "x": 255,
+    "y": 118,
+    "w": 137,
+    "h": 17,
+    "game_version": "Doomsday_1.59.0",
+    "score_threshold": 0.75,
+    "reader": "vlm",
+    "fixed": true
+  },
+  {
+    "name": "login_select_igg_id_title_static",
+    "shape": "rect",
+    "x": 253,
+    "y": 152,
+    "w": 55,
+    "h": 14,
+    "game_version": "Doomsday_1.59.0",
+    "score_threshold": 0.75,
+    "reader": "vlm",
+    "fixed": false
+  },
+  {
+    "name": "login_confirm_igg_id_static",
+    "shape": "rect",
+    "x": 509,
+    "y": 395,
+    "w": 109,
+    "h": 24,
     "game_version": "Doomsday_1.59.0",
     "score_threshold": 0.75,
     "reader": "vlm",
