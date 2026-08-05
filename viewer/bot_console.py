@@ -370,7 +370,8 @@ class BotConsole:
             base += f", {bot.intervention_count} interventions"
         return base
 
-    def _detect_location(self, bot: Bot, frame: Any) -> str | None:
+    def _detect_location(self, bot: Bot, frame: Any,
+                         gw: Any = None, locator: Any = None) -> str | None:
         if frame is None:
             return "?"
         if monitor.frame_is_blank(frame):
@@ -378,10 +379,10 @@ class BotConsole:
         loc = monitor.detect_screen(frame, self._nav_table())
         if loc is not None:
             return loc
-        # Fall back to the deterministic game-world identification system,
-        # reusing the shared GameWorld/Locator and the frame already read.
+        gw = gw or self._gw
+        locator = locator or self._locator
         try:
-            identified = self._gw.identify(_FrameSession(frame))
+            identified = gw.identify(_FrameSession(frame))
             if identified:
                 return identified
         except Exception:  # noqa: BLE001, S110

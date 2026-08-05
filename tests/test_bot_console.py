@@ -12,6 +12,8 @@ def make_console() -> BotConsole:
     c._sound_applied = {}
     c._restart_runner_pending = set()
     c._pending_restart_script = {}
+    c._gw = None
+    c._locator = None
     return c
 
 
@@ -904,6 +906,29 @@ def test_provision_n_handles_subprocess_error(tmp_path, monkeypatch):
     c._unprovisioned_accounts = lambda: [("bot01", "a@x")]
     c._provision_n(1)
     assert statuses[-1] == "bot01: FAILED (python3 not found)"
+
+
+def test_detect_location_accepts_explicit_gw_and_locator():
+    c = make_console()
+    calls = {}
+
+    class FakeLoc:
+        def find(self, frame, name):
+            return type("R", (), {"found": False})()
+
+    class FakeGW:
+        def identify(self, session):
+            calls["identified"] = True
+            return "custom_screen"
+
+    c._nav_table = lambda: {"states": {}}
+    c._gw = object()  # would fail if used
+    c._locator = object()
+    frame = np.zeros((16, 16, 3), dtype=np.uint8)
+    frame[2:6, 2:6] = 200  # non-blank so it falls through to identify()
+    loc = c._detect_location(make_bot(), frame, gw=FakeGW(), locator=FakeLoc())
+    assert loc == "custom_screen"
+    assert calls["identified"] is True
 
 
 def test_poll_does_not_run_monitor_tick(monkeypatch):
