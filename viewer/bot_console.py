@@ -205,7 +205,7 @@ class BotConsole:
         menubar.add_cascade(label="Actions", menu=act_menu)
 
         prov_menu = tk.Menu(menubar, tearoff=0)
-        prov_menu.add_command(label="Provision Bots", command=self._on_provision)
+        prov_menu.add_command(label="Provision Bots…", command=self._on_provision)
         menubar.add_cascade(label="Provision", menu=prov_menu)
 
         script_menu = tk.Menu(menubar, tearoff=0)
@@ -719,21 +719,35 @@ class BotConsole:
         self._update_rows()
 
     def _on_provision(self) -> None:
-        self._status.config(text="Provisioning bots from accounts file...")
-        self._tk.update()
+        self._provision_dialog()
 
-        for name, email in self._accounts.items():
-            self._status.config(text=f"Building {name} ({email})...")
-            self._tk.update()
-            cmd = ["python3", "-m", "gt_spector.provision", "init", name,
-                   "--account", email]
-            r = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=300, check=False)
-            tail = (r.stdout or r.stderr or "").strip()[-60:]
-            self._status.config(text=f"{name}: {tail}")
-            self._tk.update()
-        self._status.config(text="Provisioning complete (log in each bot via its viewer)")
-        self._refresh_bots()
+    def _provision_dialog(self) -> None:
+        """Dialog: list unprovisioned accounts, pick 1..N, provision sequentially."""
+        pending = self._unprovisioned_accounts()
+        win = tk.Toplevel(self._tk)
+        win.title("Provision Bots")
+        if not pending:
+            ttk.Label(win, text="All accounts provisioned").pack(padx=12, pady=12)
+            ttk.Button(win, text="Close", command=win.destroy).pack(pady=4)
+            return
+
+        ttk.Label(win, text="Unprovisioned accounts:", font=("", 10, "bold")).pack(
+            anchor=tk.W, padx=12, pady=(12, 4))
+        for name, email in pending:
+            ttk.Label(win, text=f"  {name} -> {email}", anchor=tk.W).pack(
+                anchor=tk.W, padx=16)
+        count = tk.IntVar(value=1)
+        ttk.Label(win, text="How many to provision?").pack(anchor=tk.W, padx=12, pady=(10, 2))
+        ttk.Spinbox(win, from_=1, to=len(pending), textvariable=count, width=6).pack(
+            anchor=tk.W, padx=16)
+
+        def run() -> None:
+            win.destroy()
+            self._provision_n(count.get())
+
+        ttk.Button(win, text="Provision", command=run).pack(side=tk.LEFT, padx=12, pady=12)
+        ttk.Button(win, text="Cancel", command=win.destroy).pack(
+            side=tk.LEFT, padx=4, pady=12)
 
     def _refresh_bots(self) -> None:
         self._manager.load_from_prefixes()
