@@ -114,13 +114,17 @@ In `viewer/cli.py` `CliSession`:
 
 ### Game world updates
 
-Locations to add/confirm in `game_world.yaml` (mostly already present):
+Field coordinates are **eye-derived at runtime**, not fixed locations:
+`login()` locates the password-reveal eye icon (polling until it renders —
+the browser's X button appears before the eye), then derives email 100px
+above, password aligned, login 70px below, all at x=365. The `login_*`
+locations in `game_world.yaml` are legacy references, not used for clicking.
 
-- `login_enter_email_static`, `login_enter_password`, `login_eye_static`,
-  `login_login_static` → add as locations on `igg_login` (some present).
-- `login_ok_currently_static` → fixed template, used by success-page check.
-- Confirm `igg_login` / `select_igg_id` are identifiable; both rely on
-  `igg_login_exit_static` as the base template.
+Fixed templates still used by the flow:
+
+- `login_ok_currently_static` → success-page check.
+- `igg_login` / `select_igg_id` → identifiable via `igg_login_exit_static`
+  as the base template.
 
 ## Agent-facing documentation
 
@@ -132,7 +136,7 @@ Add to `docs/cli.md` (new section "Changing a bot's account"):
 Switch a bot to a specific IGG account via the embedded browser login.
 
   python -m gt_spector --session :<display> --cli
-  > change-account sr02-07@mx1.us
+  > change_account sr02-07@mx1.us
 
 The command walks the full login flow: Settings -> Account -> Change Account
 -> IGG Account -> browser login form. It pauses at each step and asks you to
@@ -148,8 +152,11 @@ in /home/swong/dls/src/ahk/accounts (email:password per line).
 
 - Unit tests for `LoginFlow` with a fake session: verify each step's action
   and that it stops on a confirm-rejected step.
-- The live bot04 flow (2026-08-04) is the acceptance test: `change-account
-  sr02-07@mx1.us` on bot04 reaches shelter_view logged into sr02-07.
+- The live bot07 flow (2026-08-05) is the acceptance test: `expired_login
+  sr02-09@mx1.us` on bot07 navigates the expired-session dialog → game login
+  → IGG browser, types credentials, and loads the game past login.
+  Without the eye-polling fix, the same flow fails with
+  `error: eye icon not found` (eye renders after the browser X button).
 
 ## Non-goals
 

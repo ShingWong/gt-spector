@@ -132,6 +132,11 @@ coords — a click from the Wine helper would steal focus from the field that
 the xdotool click just focused). Long delays are expected between click and
 text because the browser responds slowly to input.
 
+Field positions are **eye-derived at runtime**: the password-reveal eye icon
+is located (polled until it renders — the browser's X button appears before
+the eye), then email is 100px above, password aligned, login 70px below, all
+at x=365. This adapts to page-render shifts between bots.
+
 Account passwords are in /home/swong/dls/src/ahk/accounts
 (email:password per line).
 
