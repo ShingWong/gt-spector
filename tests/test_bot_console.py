@@ -1,4 +1,5 @@
 import subprocess
+import time
 
 import numpy as np
 import pytest
@@ -21,6 +22,25 @@ def make_bot(state: BotState = BotState.RUNNING, name: str = "bot01") -> Bot:
     bot = Bot(name=name)
     bot.state = state
     return bot
+
+
+def _tk_stub():
+    """Minimal Tk double: after() runs the callback inline so marshalled
+    status/refresh calls execute synchronously on the caller thread."""
+    return type("Tk", (), {"after": lambda s, ms, fn: fn(),
+                           "update": lambda s: None})()
+
+
+def _sync_threads(monkeypatch):
+    """Run threading.Thread.start() inline so the background provisioning
+    worker finishes before _provision_n returns (deterministic, no sleeps)."""
+    import threading
+
+    class _SyncThread(threading.Thread):
+        def start(self):
+            self.run()
+
+    monkeypatch.setattr(threading, "Thread", _SyncThread)
 
 
 @pytest.mark.parametrize(
@@ -789,6 +809,7 @@ def test_unprovisioned_accounts_missing_file(tmp_path, monkeypatch):
 
 
 def test_provision_n_sequential_and_stops_on_failure(tmp_path, monkeypatch):
+    _sync_threads(monkeypatch)
     c = make_console()
     calls = []
     statuses = []
@@ -803,7 +824,7 @@ def test_provision_n_sequential_and_stops_on_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(subprocess, "run", fake_run)
     c._status = type("S", (), {"config": lambda s, text: statuses.append(text)})()
     c._refresh_bots = lambda: None
-    c._tk = type("Tk", (), {"update": lambda s: None})()
+    c._tk = _tk_stub()
     c._unprovisioned_accounts = lambda: [
         ("bot01", "a@x"), ("bot02", "b@x"), ("bot03", "c@x"), ("bot04", "d@x")]
     c._provision_n(4)
@@ -840,6 +861,7 @@ def test_load_accounts_missing_file(tmp_path, monkeypatch):
 
 
 def test_provision_n_slices_to_count(tmp_path, monkeypatch):
+    _sync_threads(monkeypatch)
     c = make_console()
     calls = []
 
@@ -850,7 +872,7 @@ def test_provision_n_slices_to_count(tmp_path, monkeypatch):
     monkeypatch.setattr(subprocess, "run", fake_run)
     c._status = type("S", (), {"config": lambda s, text: None})()
     c._refresh_bots = lambda: None
-    c._tk = type("Tk", (), {"update": lambda s: None})()
+    c._tk = _tk_stub()
     c._unprovisioned_accounts = lambda: [
         ("bot01", "a@x"), ("bot02", "b@x"), ("bot03", "c@x")]
     c._provision_n(2)
@@ -859,6 +881,7 @@ def test_provision_n_slices_to_count(tmp_path, monkeypatch):
 
 
 def test_provision_n_success_refreshes_then_reports(tmp_path, monkeypatch):
+    _sync_threads(monkeypatch)
     c = make_console()
     refreshed = []
     statuses = []
@@ -869,7 +892,7 @@ def test_provision_n_success_refreshes_then_reports(tmp_path, monkeypatch):
     monkeypatch.setattr(subprocess, "run", fake_run)
     c._status = type("S", (), {"config": lambda s, text: statuses.append(text)})()
     c._refresh_bots = lambda: refreshed.append(True)
-    c._tk = type("Tk", (), {"update": lambda s: None})()
+    c._tk = _tk_stub()
     c._unprovisioned_accounts = lambda: [("bot01", "a@x")]
     c._provision_n(1)
     assert refreshed == [True]
@@ -877,6 +900,7 @@ def test_provision_n_success_refreshes_then_reports(tmp_path, monkeypatch):
 
 
 def test_provision_n_failure_tail_falls_back_to_stdout(tmp_path, monkeypatch):
+    _sync_threads(monkeypatch)
     c = make_console()
     statuses = []
 
@@ -886,13 +910,14 @@ def test_provision_n_failure_tail_falls_back_to_stdout(tmp_path, monkeypatch):
     monkeypatch.setattr(subprocess, "run", fake_run)
     c._status = type("S", (), {"config": lambda s, text: statuses.append(text)})()
     c._refresh_bots = lambda: None
-    c._tk = type("Tk", (), {"update": lambda s: None})()
+    c._tk = _tk_stub()
     c._unprovisioned_accounts = lambda: [("bot01", "a@x")]
     c._provision_n(1)
     assert statuses[-1] == "bot01: FAILED (out of memory)"
 
 
 def test_provision_n_handles_subprocess_error(tmp_path, monkeypatch):
+    _sync_threads(monkeypatch)
     c = make_console()
     statuses = []
 
@@ -902,7 +927,7 @@ def test_provision_n_handles_subprocess_error(tmp_path, monkeypatch):
     monkeypatch.setattr(subprocess, "run", boom)
     c._status = type("S", (), {"config": lambda s, text: statuses.append(text)})()
     c._refresh_bots = lambda: None
-    c._tk = type("Tk", (), {"update": lambda s: None})()
+    c._tk = _tk_stub()
     c._unprovisioned_accounts = lambda: [("bot01", "a@x")]
     c._provision_n(1)
     assert statuses[-1] == "bot01: FAILED (python3 not found)"
@@ -1008,3 +1033,25 @@ def test_update_selection_only_rewrites_sel_column():
     # bot02 selected -> ☑; bot01 not selected -> stays ☐
     assert rows["bot01"][0] == "☐"
     assert rows["bot02"][0] == "☑"
+
+
+def test_provision_n_uses_sys_executable(monkeypatch):
+    from viewer import bot_console as bc
+
+    c = make_console()
+    called = {}
+    monkeypatch.setattr(bc, "sys", type("S", (), {"executable": "/venv/bin/python3"})())
+
+    def fake_run(cmd, **kw):
+        called["cmd"] = cmd
+        return type("R", (), {"returncode": 0, "stderr": "", "stdout": ""})()
+
+    monkeypatch.setattr(bc.subprocess, "run", fake_run)
+    c._unprovisioned_accounts = lambda: [("bot09", "a@x")]
+    c._refresh_bots = lambda: None
+    c._status = type("S", (), {"config": lambda s, **k: None})()
+    c._tk = type("Tk", (), {"after": lambda s, ms, fn: None, "update": lambda s: None})()
+
+    c._provision_n(1)
+    time.sleep(0.2)  # let the background thread run
+    assert called["cmd"][0] == "/venv/bin/python3"

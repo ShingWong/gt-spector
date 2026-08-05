@@ -2,6 +2,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 import tkinter as tk
 from pathlib import Path
@@ -161,28 +162,37 @@ class BotConsole:
     def _provision_n(self, count: int) -> None:
         """Provision the first `count` unprovisioned accounts, one at a time.
 
-        Sequential only (no parallel); verifies exit code 0 after each and stops
-        on the first failure. Refreshes the bot list when done.
+        Runs on a background thread so the UI stays responsive; progress is
+        marshalled to the Tk thread via `after`. Sequential only; verifies
+        exit code 0 after each; stops on the first failure.
         """
+        import threading
+
         pending = self._unprovisioned_accounts()[:count]
-        for name, email in pending:
-            self._status.config(text=f"Provisioning {name} ({email})...")
-            self._tk.update()
-            try:
-                r = subprocess.run(
-                    ["python3", "-m", "gt_spector.provision", "init", name,
-                     "--account", email],
-                    capture_output=True, text=True, timeout=600, check=False)
-            except (OSError, subprocess.TimeoutExpired) as e:
-                self._status.config(text=f"{name}: FAILED ({e})")
-                return
-            if r.returncode != 0:
-                tail = (r.stderr or r.stdout or "").strip()[-60:]
-                self._status.config(text=f"{name}: FAILED ({tail})")
-                return
-            self._status.config(text=f"{name}: provisioned")
-        self._refresh_bots()
-        self._status.config(text=f"Provisioned {len(pending)} bot(s)")
+
+        def _set_status(text: str) -> None:
+            self._tk.after(0, lambda: self._status.config(text=text))
+
+        def worker() -> None:
+            for name, email in pending:
+                _set_status(f"Provisioning {name} ({email})...")
+                try:
+                    r = subprocess.run(
+                        [sys.executable, "-m", "gt_spector.provision", "init",
+                         name, "--account", email],
+                        capture_output=True, text=True, timeout=600, check=False)
+                except (OSError, subprocess.TimeoutExpired) as e:
+                    _set_status(f"{name}: FAILED ({e})")
+                    return
+                if r.returncode != 0:
+                    tail = (r.stderr or r.stdout or "").strip()[-60:]
+                    _set_status(f"{name}: FAILED ({tail})")
+                    return
+                _set_status(f"{name}: provisioned")
+            self._tk.after(0, self._refresh_bots)
+            _set_status(f"Provisioned {len(pending)} bot(s)")
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def _setup_menu(self) -> None:
         menubar = tk.Menu(self._tk)
