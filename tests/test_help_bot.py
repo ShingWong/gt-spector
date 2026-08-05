@@ -58,6 +58,30 @@ def test_navigate_to_help_dialog_uses_navigator(monkeypatch):
     assert calls["click"] == (TRIGGER_X, TRIGGER_Y)
 
 
+def test_navigate_to_help_dialog_clicks_trigger_when_not_red(monkeypatch):
+    """The help dialog opens regardless of the trigger color (no request)."""
+    calls = {}
+
+    class FakeSession:
+        def refresh(self):
+            calls["refresh"] = True
+
+        def get_pixel(self, x, y):
+            return (47, 44, 44)  # dark, not red
+
+        def click(self, x, y):
+            calls["click"] = (x, y)
+
+    class FakeGW:
+        def identify(self, session):
+            return "alliance_menu"
+
+    monkeypatch.setattr("gt_spector.scripts.help_nav.Navigator", lambda *a, **k: None)
+    monkeypatch.setattr("gt_spector.scripts.help_nav.time.sleep", lambda s: None)
+    navigate_to_help_dialog(FakeGW(), object(), FakeSession())
+    assert calls["click"] == (TRIGGER_X, TRIGGER_Y)
+
+
 def test_navigate_to_help_dialog_already_there(monkeypatch):
     class FakeSession:
         def refresh(self):

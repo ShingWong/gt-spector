@@ -36,9 +36,10 @@ def navigate_to_help_dialog(gw, locator, session) -> str:
             return f"nav_failed:{result}"
         time.sleep(0.5)
         session.refresh()
-    r, g, b = session.get_pixel(TRIGGER_X, TRIGGER_Y)
-    if r >= 120 and g <= 90 and b <= 90:
-        session.click(TRIGGER_X, TRIGGER_Y)
-        time.sleep(0.3)
-        session.refresh()
+    # Open the alliance help dialog regardless of the trigger color. The red
+    # trigger indicates an active request, but the dialog itself is always
+    # openable and the help loop waits in it for the button pixel to change.
+    session.click(TRIGGER_X, TRIGGER_Y)
+    time.sleep(0.3)
+    session.refresh()
     return gw.identify(session) or "alliance_menu"
