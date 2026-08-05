@@ -273,6 +273,12 @@ screens:
       so the IGG account button position varies; identify by the fixed last-
       login text and click the dynamic IGG account button.
     templates: [game_login_last_login_static]
+  another_login_disconnect:
+    description: '"Another device is logged in with the same ID" popup.
+      Fixed-location banner; ESC dismisses to the game login page, then run
+      the login module.'
+    templates: [another_login_disconnect_detect_static]
+    advance: esc
   start_norah:
     description: startup Norah story screen. Only navigation is ESC to the
       next screen (an event screen or the shelter view). The next screen is

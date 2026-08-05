@@ -886,5 +886,17 @@
     "score_threshold": 0.75,
     "reader": "vlm",
     "fixed": true
+  },
+  {
+    "name": "another_login_disconnect_detect_static",
+    "shape": "rect",
+    "x": 631,
+    "y": 380,
+    "w": 75,
+    "h": 25,
+    "game_version": "Doomsday_1.59.0",
+    "score_threshold": 0.75,
+    "reader": "vlm",
+    "fixed": true
   }
 ]

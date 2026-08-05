@@ -169,7 +169,8 @@ class LoginStateMachine:
         if self._in_game():
             return "in_game"
         for name in ("igg_login_exit_static", "game_login_last_login_static",
-                     "start_expire_ok_static", "start_expire_more_static"):
+                     "start_expire_ok_static", "start_expire_more_static",
+                     "another_login_disconnect_detect_static"):
             if self._locate(name):
                 return name
         return "unknown"
@@ -187,6 +188,11 @@ class LoginStateMachine:
                 if r is None:
                     return "error"
                 self._session.click(r.cx, r.cy)
+            elif state == "another_login_disconnect_detect_static":
+                # Another device is logged in with this ID. ESC dismisses the
+                # popup to the game login page; the loop re-detects and runs
+                # the login module.
+                self._session.key_press("Escape")
             elif state == "game_login_last_login_static":
                 r = self._locate("game_login_igg_account")
                 if r is None:

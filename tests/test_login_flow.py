@@ -150,6 +150,32 @@ def test_state_machine_reaches_in_game(monkeypatch):
     assert result == "settings"
 
 
+def test_state_machine_esc_and_login_after_another_login_disconnect(monkeypatch):
+    """Another-device-logged-in popup -> ESC, then the login flow continues."""
+    import gt_spector.typing as T
+    from gt_spector import login_flow as L
+    monkeypatch.setattr(T, "type_text", lambda *a, **k: True)
+    monkeypatch.setattr(L.time, "sleep", lambda *a, **k: None)
+
+    s = FakeSession()
+    gw = FakeGW()
+    sm = LoginStateMachine(s, gw, FakeLoc(), "/p", ":13", confirm=lambda m: True)
+    seq = ["another_login_disconnect_detect_static", "game_login_last_login_static",
+           "igg_login_exit_static"]
+    idx = {"i": 0}
+    def detect():
+        st = seq[min(idx["i"], len(seq) - 1)]
+        idx["i"] += 1
+        return st
+    sm._detect_state = detect
+    sm._locator = FakeLoc(found=("another_login_disconnect_detect_static",
+                                 "game_login_igg_account"))
+    result = sm.run("a@b.c", "pw")
+    assert result == "settings"
+    # The popup must be dismissed with ESC before proceeding.
+    assert ("Escape",) in s.clicks
+
+
 def test_change_account_full_sequence(monkeypatch):
     import gt_spector.typing as T
     from gt_spector import login_flow as L
