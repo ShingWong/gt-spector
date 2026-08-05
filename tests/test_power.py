@@ -82,7 +82,6 @@ def test_all_target_one_failure_returns_1(capsys, monkeypatch):
     monkeypatch.setattr(P, "START_WAIT", 0)
     b1 = _Bot("bot01", "Offline")
     m = _FakeManager([b1])
-    orig = m.start_game
 
     def boom(bot):
         raise RuntimeError("xvfb failed")
@@ -90,6 +89,11 @@ def test_all_target_one_failure_returns_1(capsys, monkeypatch):
 
     assert run_power_command(m, "start", "all") == 1
     assert "bot01" in capsys.readouterr().err
+
+
+def test_start_all_zero_bots_returns_1(capsys):
+    m = _FakeManager([])
+    assert run_power_command(m, "start", "all") == 1
 
 
 def test_invalid_action_returns_2():

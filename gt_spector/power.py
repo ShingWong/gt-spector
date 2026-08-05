@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 import time
 from typing import Any
 
@@ -14,11 +15,11 @@ START_WAIT = 5.0
 def run_power_command(manager: BotManager, action: str, target: str) -> int:
     """Run start/stop/restart on a bot or all bots. Returns the exit code."""
     if action not in ACTIONS:
-        print(f"error: unknown action '{action}'", file=__import__("sys").stderr)
+        print(f"error: unknown action '{action}'", file=sys.stderr)
         return 2
     targets = list(manager.bots) if target == "all" else [manager.get(target)]
-    if targets[0] is None:
-        print(f"error: unknown bot '{target}'", file=__import__("sys").stderr)
+    if not targets or targets[0] is None:
+        print(f"error: unknown bot '{target}'", file=sys.stderr)
         return 1
     failed = False
     for bot in targets:
@@ -27,7 +28,7 @@ def run_power_command(manager: BotManager, action: str, target: str) -> int:
         try:
             _do(manager, action, bot)
         except (OSError, RuntimeError) as e:
-            print(f"error: {bot.name}: {e}", file=__import__("sys").stderr)
+            print(f"error: {bot.name}: {e}", file=sys.stderr)
             failed = True
             continue
         print(f"{bot.name}: {_state(manager, bot, action)}")
