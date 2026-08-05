@@ -753,3 +753,32 @@ def test_monitor_tick_recovers_from_runner_exception(tmp_path, monkeypatch):
     # Must not raise: the poll loop survives a per-bot recovery failure.
     c._monitor_tick()
     assert bot.state == BotState.RUNNING
+
+
+def test_unprovisioned_accounts_line_order(tmp_path, monkeypatch):
+    from viewer import bot_console as bc
+
+    accounts = tmp_path / "accounts"
+    accounts.write_text(
+        "sr02-04@mx1.us:bamboo-H4\n"
+        "sr02-05@mx1.us:bamboo-H4\n"
+        "sr02-20@mx1.us:bamboo-H4\n"
+    )
+    prefixes = tmp_path / "prefixes"
+    (prefixes / "bot01" / "drive_c").mkdir(parents=True)  # bot01 provisioned
+
+    monkeypatch.setattr(bc, "ACCOUNTS_FILE", accounts)
+    monkeypatch.setattr(bc, "PREFIXES_DIR", prefixes)
+
+    c = make_console()
+    got = c._unprovisioned_accounts()
+    # bot01 (sr02-04) is provisioned; bot02 (sr02-05) and bot03 (sr02-20) are not
+    assert got == [("bot02", "sr02-05@mx1.us"), ("bot03", "sr02-20@mx1.us")]
+
+
+def test_unprovisioned_accounts_missing_file(tmp_path, monkeypatch):
+    from viewer import bot_console as bc
+
+    monkeypatch.setattr(bc, "ACCOUNTS_FILE", tmp_path / "nope")
+    monkeypatch.setattr(bc, "PREFIXES_DIR", tmp_path / "prefixes")
+    assert make_console()._unprovisioned_accounts() == []

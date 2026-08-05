@@ -17,6 +17,9 @@ from gt_spector.script import ScriptRunner
 from gt_spector.scripts.help_bot import HelpBot
 from gt_spector.scripts.navigate_bot import NavigateBot
 
+ACCOUNTS_FILE = Path("/home/swong/dls/src/ahk/accounts")
+PREFIXES_DIR = Path("/home/swong/dls/wineprefix_bots")
+
 
 class _VlmAdapter:
     """Thin wrapper around gt_spector.vlm (WIP module); degrades to None via _make_vlm."""
@@ -119,15 +122,39 @@ class BotConsole:
     def _load_accounts(self) -> dict[str, str]:
         accounts: dict[str, str] = {}
         try:
-            for i, line in enumerate(Path("/home/swong/dls/src/ahk/accounts").read_text().splitlines()):
-                line = line.strip()
-                if ":" in line:
-                    email = line.split(":")[0].strip()
-                    name = f"bot{i + 1:02d}"
-                    accounts[name] = email
+            lines = ACCOUNTS_FILE.read_text().splitlines()
         except (FileNotFoundError, OSError):
-            pass
+            return accounts
+        for i, line in enumerate(lines):
+            line = line.strip()
+            if ":" in line:
+                email = line.split(":")[0].strip()
+                name = f"bot{i + 1:02d}"
+                accounts[name] = email
         return accounts
+
+    def _unprovisioned_accounts(self) -> list[tuple[str, str]]:
+        """Accounts (line order -> bot name) whose prefix is not provisioned.
+
+        Returns [(bot_name, email), ...] for accounts lacking a prefix with
+        drive_c. Accounts are mapped by line order (first -> bot01), never by
+        assuming the email is sequential.
+        """
+        out: list[tuple[str, str]] = []
+        try:
+            lines = ACCOUNTS_FILE.read_text().splitlines()
+        except (FileNotFoundError, OSError):
+            return out
+        for i, line in enumerate(lines):
+            line = line.strip()
+            if ":" not in line:
+                continue
+            email = line.split(":")[0].strip()
+            name = f"bot{i + 1:02d}"
+            if (PREFIXES_DIR / name / "drive_c").exists():
+                continue
+            out.append((name, email))
+        return out
 
     def _setup_menu(self) -> None:
         menubar = tk.Menu(self._tk)
