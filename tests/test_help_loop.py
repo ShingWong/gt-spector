@@ -24,6 +24,13 @@ def test_help_loop_clicks_on_gold_pixel():
 
 
 def test_help_loop_idle_on_gray_pixel():
-    s = FakeSession((120, 120, 120))
+    s = FakeSession((71, 72, 71))
     assert HelpLoop().run(s) == "idle"
+    assert s.clicks == 0
+
+
+def test_help_loop_stuck_on_unexpected_pixel():
+    """Neither gold nor dim (e.g. a popup covering the help button) -> stuck."""
+    s = FakeSession((78, 57, 17))
+    assert HelpLoop().run(s) == "stuck"
     assert s.clicks == 0

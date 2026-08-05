@@ -23,6 +23,10 @@ POLL_INTERVAL = 0.1  # 100ms
 class HelpBot:
     name = "help-bot"
     expected_screen = "ALLIANCE"
+    # HelpBot re-navigates to the help dialog in its own thread on every tick.
+    # The console's recovery path (ESC-to-shelter + run_script) is redundant
+    # and disruptive, so the console skips it for self-healing runners.
+    self_healing = True
 
     def __init__(self) -> None:
         self._display = 0
@@ -75,6 +79,11 @@ class HelpBot:
             self._thread = None
         self._status = "stopped"
 
+    def run_script(self, script: Any = None) -> None:
+        """Restart the help loop. ScriptRunner-compatible recovery entry."""
+        self.stop()
+        self.start(self._display)
+
     def _run(self) -> None:
         while not self._stop.is_set():
             try:
@@ -85,6 +94,9 @@ class HelpBot:
 
     def _tick(self) -> None:
         self._session.refresh()
+        if self._reaping_popup_up():
+            self._dismiss_popup()
+            return
         screen = self._gw.identify(self._session)
         if screen != "help_dialog":
             # Not in the dialog: navigate to it (re-opens after it closes).
@@ -94,8 +106,28 @@ class HelpBot:
         if result == "clicked":
             self._status = f"clicked_{self._loop.help_clicks}"
             # Dialog may close after a click; re-navigate next tick.
+        elif result == "stuck":
+            # Help button pixel is neither gold nor dim: a popup is covering
+            # it. Dismiss with ESC and re-navigate.
+            self._dismiss_popup()
         else:
             self._status = result or "idle"
+
+    def _reaping_popup_up(self) -> bool:
+        """True when the resource-reaping screen-saver popup is visible.
+
+        It can appear over any screen; any click or ESC dismisses it.
+        """
+        try:
+            r = self._locator.find(self._session.frame, "resouce_reaping_detect_static")
+            return bool(r.found)
+        except Exception:  # noqa: BLE001
+            return False
+
+    def _dismiss_popup(self) -> None:
+        self._session.key_press("Escape")
+        self._status = "dismissed_popup, re-navigating"
+        self._navigate_to_help_dialog()
 
     def _navigate_to_help_dialog(self) -> None:
         from gt_spector.scripts.help_nav import navigate_to_help_dialog

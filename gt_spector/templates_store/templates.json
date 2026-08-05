@@ -874,5 +874,17 @@
     "score_threshold": 0.75,
     "reader": "vlm",
     "fixed": false
+  },
+  {
+    "name": "resouce_reaping_detect_static",
+    "shape": "rect",
+    "x": 554,
+    "y": 356,
+    "w": 31,
+    "h": 29,
+    "game_version": "Doomsday_1.59.0",
+    "score_threshold": 0.75,
+    "reader": "vlm",
+    "fixed": true
   }
 ]

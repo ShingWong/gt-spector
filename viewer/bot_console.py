@@ -727,34 +727,44 @@ class BotConsole:
 
     def _monitor_tick(self) -> None:
         for bot in self._manager.bots:
-            if bot.state != BotState.RUNNING or not bot.pid:
-                continue
-            now = time.monotonic()
-            self._monitor.note_running(bot, now)
-            if self._sound_applied.get(bot.name) != bot.pid:
-                self._apply_sound_for_bot(bot)
-            runner = self._runners.get(bot.name)
-            if not self._monitor.check_responsiveness(bot, now):
-                self._monitor.mark_crash(bot)
-                logs.log_bot(bot.name, "non-responsive, restarting game")
-                self._manager.restart_game(bot)
-                self._monitor.mark_intervention(bot)
-                continue
-            if runner and runner.script:
-                expected = getattr(runner.script, "expected_screen", None)
-                if expected:
-                    loc = self._detect_location(bot, self._frames.get(bot.name))
-                    if self._needs_recovery(loc, expected):
-                        if self._monitor.recoveries_left(bot):
-                            logs.log_bot(bot.name, f"wrong screen {loc}, recovering")
-                            self._monitor.recover(
-                                bot, lambda b, s: self._runners[b.name].run_script(s), runner.script)
-                        else:
-                            logs.log_bot(bot.name, "recovery exhausted, marking ERROR")
-                            self._monitor.mark_error(bot, runner)
-                            bot.state = BotState.ERROR
+            try:
+                self._monitor_one(bot)
+            except Exception:  # noqa: BLE001 - one bot must not kill the poll
+                logs.log_bot(bot.name, "monitor error, continuing")
+
+    def _monitor_one(self, bot: Bot) -> None:
+        if bot.state != BotState.RUNNING or not bot.pid:
+            return
+        now = time.monotonic()
+        self._monitor.note_running(bot, now)
+        if self._sound_applied.get(bot.name) != bot.pid:
+            self._apply_sound_for_bot(bot)
+        runner = self._runners.get(bot.name)
+        if not self._monitor.check_responsiveness(bot, now):
+            self._monitor.mark_crash(bot)
+            logs.log_bot(bot.name, "non-responsive, restarting game")
+            self._manager.restart_game(bot)
+            self._monitor.mark_intervention(bot)
+            return
+        if runner and runner.script:
+            # Self-healing scripts (HelpBot) re-navigate on their own thread;
+            # console recovery would crash (run_script) or fight the thread.
+            if getattr(runner.script, "self_healing", False):
+                return
+            expected = getattr(runner.script, "expected_screen", None)
+            if expected:
+                loc = self._detect_location(bot, self._frames.get(bot.name))
+                if self._needs_recovery(loc, expected):
+                    if self._monitor.recoveries_left(bot):
+                        logs.log_bot(bot.name, f"wrong screen {loc}, recovering")
+                        self._monitor.recover(
+                            bot, lambda b, s: self._runners[b.name].run_script(s), runner.script)
                     else:
-                        self._monitor.recovery_succeeded(bot)
+                        logs.log_bot(bot.name, "recovery exhausted, marking ERROR")
+                        self._monitor.mark_error(bot, runner)
+                        bot.state = BotState.ERROR
+                else:
+                    self._monitor.recovery_succeeded(bot)
 
     def _poll(self) -> None:
         self._nav_cache = None

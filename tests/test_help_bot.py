@@ -96,3 +96,80 @@ def test_navigate_to_help_dialog_unknown_screen(monkeypatch):
     monkeypatch.setattr("gt_spector.scripts.help_nav.Navigator", lambda *a, **k: None)
     status = navigate_to_help_dialog(FakeGW(), object(), FakeSession())
     assert status == "unknown_screen"
+
+
+class _TickSession:
+    def __init__(self, screen="help_dialog", pixel=(71, 72, 71), keys=()):
+        self.screen = screen
+        self.pixel = pixel
+        self.keys = list(keys)
+        self.clicks = []
+        self.refreshes = 0
+        self.frame = None
+
+    def refresh(self):
+        self.refreshes += 1
+
+    def get_pixel(self, x, y):
+        return self.pixel
+
+    def click(self, x, y):
+        self.clicks.append((x, y))
+
+    def key_press(self, key):
+        self.keys.append(key)
+
+
+class _TickGW:
+    def __init__(self, screen="help_dialog"):
+        self.screen = screen
+
+    def identify(self, session):
+        return session.screen
+
+    def set_locator(self, locator):
+        pass
+
+
+def test_help_bot_tick_dismisses_stuck_popup(monkeypatch):
+    """Neither-gold-nor-dim pixel -> ESC, then re-navigate to the dialog."""
+    b = HelpBot()
+    b._session = _TickSession(pixel=(78, 57, 17))
+    b._gw = _TickGW()
+    b._loop = type("L", (), {"run": lambda self, s: "stuck", "help_clicks": 0})()
+    recovered = []
+    monkeypatch.setattr(b, "_navigate_to_help_dialog",
+                        lambda: recovered.append(True) or setattr(b, "_status", "recovered"))
+    b._tick()
+    assert "Escape" in b._session.keys
+    assert recovered == [True]
+    assert b._status == "recovered"
+
+
+def test_help_bot_tick_dismisses_reaping_screen(monkeypatch):
+    """resource-reaping screen-saver popup detected -> ESC + re-navigate."""
+    b = HelpBot()
+    b._session = _TickSession(pixel=(71, 72, 71))
+    b._gw = _TickGW()
+    b._locator = type("L", (), {
+        "find": lambda self, frame, name: type("R", (), {
+            "found": name == "resouce_reaping_detect_static", "score": 1.0})()})()
+    b._loop = type("L", (), {"run": lambda self, s: "idle", "help_clicks": 0})()
+    recovered = []
+    monkeypatch.setattr(b, "_navigate_to_help_dialog",
+                        lambda: recovered.append(True) or setattr(b, "_status", "recovered"))
+    b._tick()
+    assert "Escape" in b._session.keys
+    assert recovered == [True]
+
+
+def test_help_bot_tick_clicks_gold_and_updates_status(monkeypatch):
+    b = HelpBot()
+    b._session = _TickSession(pixel=(223, 170, 67))
+    b._gw = _TickGW()
+    b._locator = type("L", (), {
+        "find": lambda self, frame, name: type("R", (), {"found": False, "score": 0.0})()})()
+    loop = type("L", (), {"help_clicks": 3, "run": lambda self, s: "clicked"})()
+    b._loop = loop
+    b._tick()
+    assert b._status == "clicked_3"

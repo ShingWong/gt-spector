@@ -469,3 +469,94 @@ def test_help_bot_expected_screen():
     from gt_spector.scripts.help_bot import HelpBot
 
     assert HelpBot.expected_screen == "ALLIANCE"
+
+
+def test_help_bot_has_run_script():
+    """Recovery calls run_script on the runner; HelpBot must provide it."""
+    from gt_spector.scripts.help_bot import HelpBot
+
+    assert hasattr(HelpBot, "run_script")
+
+
+def test_help_bot_is_self_healing():
+    """Console must skip crash-prone recovery for self-healing runners."""
+    from gt_spector.scripts.help_bot import HelpBot
+
+    assert getattr(HelpBot, "self_healing", False) is True
+
+
+def test_help_bot_run_script_restarts_thread(monkeypatch):
+    from gt_spector.scripts.help_bot import HelpBot
+
+    b = HelpBot()
+    calls = []
+    monkeypatch.setattr(b, "stop", lambda: calls.append("stop"))
+    monkeypatch.setattr(b, "start", lambda d: calls.append(("start", d)))
+    b.run_script("anything")
+    assert calls == ["stop", ("start", 0)]
+
+
+def test_monitor_tick_skips_recovery_for_self_healing_runner(tmp_path, monkeypatch):
+    """Self-healing runners (HelpBot) are not run through console recovery."""
+    from gt_spector import logs
+    from gt_spector.scripts.help_bot import HelpBot
+
+    monkeypatch.setattr(logs, "LOGS_DIR", tmp_path)
+    c = make_console()
+    bot = make_bot()
+    bot.pid = 111
+    c._manager = type("M", (), {"bots": [bot]})()
+    hb = HelpBot()
+    hb.self_healing = True
+    c._runners = {"bot01": hb}
+    c._frames = {"bot01": None}
+    calls = {}
+
+    class FakeMonitor:
+        def note_running(self, bot, now):
+            pass
+
+        def check_responsiveness(self, bot, now):
+            return True
+
+        def recover(self, bot, run_script, script):
+            calls["recover"] = True
+
+    c._monitor = FakeMonitor()
+    c._detect_location = lambda bot, frame: "LOBBY"
+    c._monitor_tick()
+    assert "recover" not in calls
+
+
+def test_monitor_tick_recovers_from_runner_exception(tmp_path, monkeypatch):
+    """A runner raising in the recovery path must not kill the whole poll."""
+    from gt_spector import logs
+
+    monkeypatch.setattr(logs, "LOGS_DIR", tmp_path)
+    c = make_console()
+    bot = make_bot()
+    bot.pid = 111
+    c._manager = type("M", (), {"bots": [bot]})()
+    script = type("S", (), {"expected_screen": "ALLIANCE"})()
+    runner = type("R", (), {"script": script})()
+    c._runners = {"bot01": runner}
+    c._frames = {"bot01": None}
+
+    class FakeMonitor:
+        def note_running(self, bot, now):
+            pass
+
+        def check_responsiveness(self, bot, now):
+            return True
+
+        def recoveries_left(self, bot):
+            return True
+
+        def recover(self, bot, run_script, script):
+            raise RuntimeError("boom")
+
+    c._monitor = FakeMonitor()
+    c._detect_location = lambda bot, frame: "LOBBY"
+    # Must not raise: the poll loop survives a per-bot recovery failure.
+    c._monitor_tick()
+    assert bot.state == BotState.RUNNING

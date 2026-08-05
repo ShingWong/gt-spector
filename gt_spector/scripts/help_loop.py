@@ -5,6 +5,8 @@ State machine (mirrors the original AHK help loop):
   - After clicking, the button turns GRAY (help sent / request consumed).
   - Wait for it to return to GOLD (a new request arrives) before clicking
     again. This prevents re-clicking the same completed help.
+  - When the pixel is NEITHER gold nor gray (e.g. a popup covers the help
+    button), report "stuck" so the HelpBot can dismiss the popup and recover.
 
 No VLM, no template locator - just per-cycle pixel matches.
 """
@@ -20,6 +22,9 @@ HELP_COLOR = 0xE1AB45
 VARIANCE = 0.18
 CLICK_X = 495
 CLICK_Y = 682
+
+# Dim/gray state: help sent, waiting for a new request. Channels near-equal.
+DIM_MAX_CHANNEL_SPREAD = 40
 
 # After a click, require this many idle seconds with a non-gold pixel before
 # considering the help processed (prevents rapid re-clicks).
@@ -48,16 +53,22 @@ class HelpLoop:
         self._cooldown_until = 0.0
 
     def run(self, session, bot=None) -> str | None:
-        """One poll cycle. Returns 'clicked' / 'cooldown' / 'idle'."""
+        """One poll cycle. Returns 'clicked' / 'cooldown' / 'idle' / 'stuck'."""
         try:
             now = time.monotonic()
             if now < self._cooldown_until:
                 return "cooldown"
-            if color_match(_pixel(session), HELP_COLOR):
+            r, g, b = session.get_pixel(HELP_X, HELP_Y)
+            if color_match((r << 16) | (g << 8) | b, HELP_COLOR):
                 session.click(CLICK_X, CLICK_Y)
                 self.help_clicks += 1
                 self._cooldown_until = now + COOLDOWN_AFTER_CLICK
                 return "clicked"
+            # Dim/gray: help sent, waiting. Anything else is a covering popup.
+            spread = max(r, g, b) - min(r, g, b)
+            if spread <= DIM_MAX_CHANNEL_SPREAD:
+                return "idle"
+            return "stuck"
         except Exception:  # noqa: BLE001, S110
             pass
         return "idle"
