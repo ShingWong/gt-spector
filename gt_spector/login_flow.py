@@ -26,6 +26,70 @@ SELECT_ID = (350, 165)
 OK = (700, 560)
 
 
+def _window_click(session: Any, x: int, y: int) -> bool:
+    session.click(x, y)
+    return True
+
+
+def _type(prefix: str, display: str, text: str, x: int, y: int) -> bool:
+    return typing.type_at(prefix, display, f"{{CtrlA}}{text}", x, y)
+
+
+def _wait(session: Any, seconds: float = 4.0) -> None:
+    time.sleep(seconds)
+    session.refresh()
+
+
+def login(
+    email: str,
+    password: str,
+    session: Any,
+    gw: GameWorld,
+    locator: Any,
+    prefix: str,
+    display: str,
+    confirm: Callable[[str], bool] | None = None,
+) -> str:
+    """Complete the IGG browser login from the current screen.
+
+    Starts from wherever the browser login page is (e.g. igg_login after an
+    expired session, or after change_account opens the browser) and drives
+    through email, password, submit, continue, select ID, and confirm. Returns
+    the final screen name, or "cancelled" / "error".
+    """
+    confirm = confirm or (lambda _msg: True)
+
+    steps: list[tuple[str, Callable[[], bool]]] = [
+        ("enter email", lambda: _type(prefix, display, email, *EMAIL)),
+        ("enter password", lambda: _type(prefix, display, password, *PASSWORD)),
+        ("reveal password", lambda: _window_click(session, *EYE)),
+        ("hide password", lambda: _window_click(session, *EYE)),
+        ("submit login", lambda: _submit_login(session)),
+        ("continue after login", lambda: _window_click(session, *CONTINUE)),
+        ("select id", lambda: _select_id(session)),
+        ("confirm ok", lambda: _window_click(session, *OK)),
+    ]
+    for label, fn in steps:
+        if not confirm(label):
+            return "cancelled"
+        if not fn():
+            return "error"
+        _wait(session)
+    return gw.identify(session) or "unknown"
+
+
+def _submit_login(session: Any) -> bool:
+    session.click(*LOGIN_BTN)
+    _wait(session, 5)
+    return True
+
+
+def _select_id(session: Any) -> bool:
+    session.click(*SELECT_ID)
+    _wait(session, 5)
+    return True
+
+
 class LoginFlow:
     def __init__(
         self,
@@ -43,53 +107,37 @@ class LoginFlow:
         self._display = display
         self._confirm = confirm or (lambda _msg: True)
 
-    def _window_click(self, x: int, y: int) -> bool:
-        self._session.click(x, y)
-        return True
-
-    def _type(self, text: str, x: int, y: int) -> bool:
-        return typing.type_at(self._prefix, self._display, f"{{CtrlA}}{text}", x, y)
-
-    def _wait(self, seconds: float = 4.0) -> None:
-        time.sleep(seconds)
-        self._session.refresh()
-
     def change_account(self, email: str, password: str) -> str:
         gw = self._gw
         from gt_spector.navigator import Navigator
         nav = Navigator(gw, self._locator, self._session)
 
-        steps: list[tuple[str, Callable[[], bool]]] = [
+        navigate_steps: list[tuple[str, Callable[[], bool]]] = [
             ("navigate", lambda: nav.goto("change_account") is not None),
             ("open igg browser", self._open_igg_browser),
-            ("enter email", lambda: self._type(email, *EMAIL)),
-            ("enter password", lambda: self._type(password, *PASSWORD)),
-            ("reveal password", lambda: self._window_click(*EYE)),
-            ("hide password", lambda: self._window_click(*EYE)),
-            ("submit login", self._submit_login),
-            ("continue after login", lambda: self._window_click(*CONTINUE)),
-            ("select id", self._select_id),
-            ("confirm ok", lambda: self._window_click(*OK)),
         ]
-        for label, fn in steps:
+        for label, fn in navigate_steps:
             if not self._confirm(label):
                 return "cancelled"
             if not fn():
                 return "error"
             self._wait()
-        return gw.identify(self._session) or "unknown"
+
+        return login(
+            email, password,
+            self._session, gw, self._locator,
+            self._prefix, self._display,
+            confirm=self._confirm,
+        )
 
     def _open_igg_browser(self) -> bool:
         self._window_click(735, 262)
         self._wait(6)
         return True
 
-    def _submit_login(self) -> bool:
-        self._window_click(*LOGIN_BTN)
-        self._wait(5)
+    def _window_click(self, x: int, y: int) -> bool:
+        self._session.click(x, y)
         return True
 
-    def _select_id(self) -> bool:
-        self._window_click(*SELECT_ID)
-        self._wait(5)
-        return True
+    def _wait(self, seconds: float = 4.0) -> None:
+        _wait(self._session, seconds)
