@@ -1,15 +1,12 @@
-"""IGG browser login as a locator-driven state machine.
+"""IGG login: state-machine navigation + working browser login.
 
-The login path (expired-session dialog -> game login page -> IGG browser
-login -> success -> select ID -> confirm -> in game) is modeled as a set of
-states, each detected by locating templates. At every step the machine
-locates templates to determine the current state and acts accordingly,
-branching to whatever login state is actually present (the page title and
-field positions shift between renders, so fixed coordinates are unreliable).
+The path to the browser login (expired-session dialog -> game login page ->
+IGG browser) is modeled as a locator-driven state machine that adapts to
+whatever screen is present. Once on the IGG browser login form, the proven
+login() routine (eye-derived field positions, sendtext.exe typing) takes
+over and completes the login through the ID-select/confirm screens.
 
-Credential entry derives field positions from the password-reveal eye icon
-(both eye versions are seen across renders). Typing uses the one-shot
-sendtext.exe helper. The terminal state is any in-game screen.
+Credential entry is NOT rewritten: it is the same code verified on bot05.
 """
 
 from __future__ import annotations
@@ -27,8 +24,9 @@ LOGIN_Y_BELOW_EYE = 70
 
 EYE_TEMPLATES = ("igg_login_eye2_static", "login_eye_static")
 
-# In-game templates that mean "login succeeded".
-IN_GAME_TEMPLATES = ("region_static", "region_overview", "avatar", "shelter")
+# Reliable in-game templates (login succeeded). region_overview/avatar match
+# spuriously on the login page, so they are excluded.
+IN_GAME_TEMPLATES = ("region_static", "shelter")
 
 
 def _wait(session: Any, seconds: float = 4.0) -> None:
@@ -40,12 +38,77 @@ def _type(prefix: str, display: str, text: str, x: int, y: int) -> bool:
     return typing.type_at(prefix, display, f"{{CtrlA}}{text}", x, y)
 
 
-def _find(locator: Any, session: Any, name: str):
-    r = locator.find(session.frame, name)
-    return r if r.found else None
+def _window_click(session: Any, x: int, y: int) -> bool:
+    session.click(x, y)
+    return True
+
+
+def _find_eye(locator: Any, session: Any) -> tuple[int, int] | None:
+    """Locate the password-reveal eye icon (position varies by page render)."""
+    if locator is None:
+        from gt_spector.locator import Locator
+        locator = Locator()
+    for name in EYE_TEMPLATES:
+        r = locator.find(session.frame, name)
+        if r.found:
+            return (r.cx, r.cy)
+    return None
+
+
+def login(
+    email: str,
+    password: str,
+    session: Any,
+    gw: GameWorld,
+    locator: Any,
+    prefix: str,
+    display: str,
+    confirm: Callable[[str], bool] | None = None,
+) -> str:
+    """Complete the IGG browser login from the current screen (verified).
+
+    Starts from wherever the browser login page is and drives through email,
+    password, submit, continue, select ID, and confirm. Returns the final
+    screen name, or "cancelled" / "error". Field positions are derived from
+    the password-reveal eye icon (email 100px above, password aligned, login
+    70px below, all at x=365 inside the wide fields).
+    """
+    confirm = confirm or (lambda _msg: True)
+    eye = _find_eye(locator, session)
+    if eye is None:
+        return "error: eye icon not found"
+    _, ey = eye
+    email_pos = (EMAIL_X, ey - EMAIL_Y_ABOVE_EYE)
+    pass_pos = (EMAIL_X, ey)
+    login_pos = (EMAIL_X, ey + LOGIN_Y_BELOW_EYE)
+
+    steps: list[tuple[str, Callable[[], bool]]] = [
+        ("enter email", lambda: _type(prefix, display, email, *email_pos)),
+        ("enter password", lambda: _type(prefix, display, password, *pass_pos)),
+        ("reveal password", lambda: _window_click(session, *eye)),
+        ("hide password", lambda: _window_click(session, *eye)),
+        ("submit login", lambda: _window_click(session, *login_pos)),
+        ("continue after login", lambda: _window_click(session, 500, 300)),
+        ("select id", lambda: _window_click(session, 350, 165)),
+        ("confirm ok", lambda: _window_click(session, 700, 560)),
+    ]
+    for label, fn in steps:
+        if not confirm(label):
+            return "cancelled"
+        if not fn():
+            return "error"
+        _wait(session)
+    return gw.identify(session) or "unknown"
 
 
 class LoginStateMachine:
+    """Drive navigation to the IGG browser, then call login().
+
+    States are detected by locating templates. On the browser login form
+    (igg_login), the working login() completes the flow. Unknown states fall
+    back to the Navigator's ESC recovery.
+    """
+
     def __init__(
         self,
         session: Any,
@@ -62,81 +125,22 @@ class LoginStateMachine:
         self._display = display
         self._confirm = confirm or (lambda _msg: True)
 
-    # ── State detection ────────────────────────────────────────────────
     def _locate(self, name: str):
-        return _find(self._locator, self._session, name)
+        r = self._locator.find(self._session.frame, name)
+        return r if r.found else None
 
     def _in_game(self) -> bool:
         return any(self._locate(t) is not None for t in IN_GAME_TEMPLATES)
 
     def _detect_state(self) -> str:
-        """Return the current state name by locating templates.
-
-        Priority: in-game (terminal) first, then login states, so a screen
-        that matches multiple templates resolves to the most advanced state.
-        """
         if self._in_game():
             return "in_game"
-        for name in ("login_confirm_igg_id_static", "login_ok_currently_static",
-                     "login_select_igg_id_static", "igg_login_exit_static",
-                     "game_login_last_login_static",
+        for name in ("igg_login_exit_static", "game_login_last_login_static",
                      "start_expire_ok_static", "start_expire_more_static"):
             if self._locate(name):
                 return name
         return "unknown"
 
-    # ── Actions ────────────────────────────────────────────────────────
-    def _dismiss_expired(self) -> bool:
-        for name in ("start_expire_ok_static", "start_expire_more_static"):
-            r = self._locate(name)
-            if r:
-                self._session.click(r.cx, r.cy)
-                return True
-        return False
-
-    def _open_browser(self) -> bool:
-        r = self._locate("game_login_igg_account")
-        if r:
-            self._session.click(r.cx, r.cy)
-            return True
-        return False
-
-    def _fill_and_submit(self, email: str, password: str) -> bool:
-        eye = None
-        for t in EYE_TEMPLATES:
-            r = self._locate(t)
-            if r:
-                eye = (r.cx, r.cy)
-                break
-        if eye is None:
-            return False
-        _, ey = eye
-        email_pos = (EMAIL_X, ey - EMAIL_Y_ABOVE_EYE)
-        pass_pos = (EMAIL_X, ey)
-        login_pos = (EMAIL_X, ey + LOGIN_Y_BELOW_EYE)
-        if not _type(self._prefix, self._display, email, *email_pos):
-            return False
-        if not _type(self._prefix, self._display, password, *pass_pos):
-            return False
-        self._session.click(*eye)
-        _wait(self._session, 1)
-        self._session.click(*eye)
-        self._session.click(*login_pos)
-        return True
-
-    def _click_continue(self) -> bool:
-        self._session.click(500, 300)
-        return True
-
-    def _click_select_id(self) -> bool:
-        self._session.click(350, 165)
-        return True
-
-    def _click_confirm_ok(self) -> bool:
-        self._session.click(700, 560)
-        return True
-
-    # ── Main loop ──────────────────────────────────────────────────────
     def run(self, email: str, password: str) -> str:
         for _ in range(20):
             state = self._detect_state()
@@ -145,48 +149,30 @@ class LoginStateMachine:
             if not self._confirm(state):
                 return "cancelled"
 
-            if state == "start_expire_ok_static" or state == "start_expire_more_static":
-                if not self._dismiss_expired():
+            if state in ("start_expire_ok_static", "start_expire_more_static"):
+                r = self._locate(state)
+                if r is None:
                     return "error"
+                self._session.click(r.cx, r.cy)
             elif state == "game_login_last_login_static":
-                if not self._open_browser():
+                r = self._locate("game_login_igg_account")
+                if r is None:
                     return "error"
+                self._session.click(r.cx, r.cy)
             elif state == "igg_login_exit_static":
-                if not self._fill_and_submit(email, password):
-                    return "error"
-            elif state == "login_ok_currently_static":
-                self._click_continue()
-            elif state == "login_select_igg_id_static":
-                self._click_select_id()
-            elif state == "login_confirm_igg_id_static":
-                self._click_confirm_ok()
-            elif state == "unknown":
-                # Last resort: location-identifier recovery via Navigator.
+                # Browser login form reached: use the proven login() routine.
+                return login(
+                    email, password,
+                    self._session, self._gw, self._locator,
+                    self._prefix, self._display,
+                    confirm=self._confirm,
+                )
+            else:  # unknown: last-resort ESC recovery
                 from gt_spector.navigator import Navigator
                 nav = Navigator(self._gw, self._locator, self._session)
                 nav._recover_esc()
             _wait(self._session)
         return "timeout"
-
-
-def login(
-    email: str,
-    password: str,
-    session: Any,
-    gw: GameWorld,
-    locator: Any,
-    prefix: str,
-    display: str,
-    confirm: Callable[[str], bool] | None = None,
-) -> str:
-    """Complete the IGG browser login from the current screen.
-
-    Runs the state machine until an in-game screen is reached. Returns the
-    final screen name, or "cancelled"/"error"/"timeout".
-    """
-    return LoginStateMachine(
-        session, gw, locator, prefix, display, confirm=confirm,
-    ).run(email, password)
 
 
 def expired_login(
@@ -200,7 +186,9 @@ def expired_login(
     confirm: Callable[[str], bool] | None = None,
 ) -> str:
     """Complete login from the expired-session / unlinked-account entry."""
-    return login(email, password, session, gw, locator, prefix, display, confirm=confirm)
+    return LoginStateMachine(
+        session, gw, locator, prefix, display, confirm=confirm,
+    ).run(email, password)
 
 
 class LoginFlow:
