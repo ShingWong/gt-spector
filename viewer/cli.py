@@ -297,6 +297,36 @@ class CliSession(cmd.Cmd):
         result = flow.change_account(email, password)
         print(f"change_account result: {result}")
 
+    def do_expired_login(self, arg: str) -> None:
+        """expired_login <email> [password] — complete login after an expired session.
+
+        Drives the expired-session dialog and game login page to the browser,
+        then completes the IGG login. Password defaults to the farm default.
+        """
+        from gt_spector.login_flow import expired_login
+        args = shlex.split(arg)
+        if not args:
+            print("Usage: expired_login <email> [password]")
+            return
+        email = args[0]
+        password = args[1] if len(args) > 1 else "bamboo-H4"
+
+        def confirm(msg: str) -> bool:
+            ans = input(f"  [confirm] {msg}? [y/N] ").strip().lower()
+            return ans in ("y", "yes")
+
+        try:
+            prefix = self._bot_prefix()
+        except RuntimeError as e:
+            print(f"error: {e}")
+            return
+        result = expired_login(
+            email, password,
+            self._session, self._gw, self._locator,
+            prefix, f":{self._display}", confirm=confirm,
+        )
+        print(f"expired_login result: {result}")
+
     def do_where(self, arg: str) -> None:
         """where — identify the current screen"""
         self._session.refresh()

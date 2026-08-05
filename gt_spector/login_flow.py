@@ -90,6 +90,66 @@ def _select_id(session: Any) -> bool:
     return True
 
 
+def expired_login(
+    email: str,
+    password: str,
+    session: Any,
+    gw: GameWorld,
+    locator: Any,
+    prefix: str,
+    display: str,
+    confirm: Callable[[str], bool] | None = None,
+) -> str:
+    """Complete login from the expired-session / unlinked-account entry.
+
+    The game shows the expired-session dialog whenever an account is unlinked
+    or its session expires. Drive it to the browser login page (OK on the
+    dialog, then the game login page's IGG account button), then complete the
+    IGG browser login. Returns the final screen name, or "cancelled"/"error".
+    """
+    confirm = confirm or (lambda _msg: True)
+
+    nav_steps: list[tuple[str, Callable[[], bool]]] = [
+        ("dismiss expired session", lambda: _ok_expired(session, locator)),
+        ("open igg browser", lambda: _open_game_login(session, locator)),
+    ]
+    for label, fn in nav_steps:
+        if not confirm(label):
+            return "cancelled"
+        if not fn():
+            return "error"
+        _wait(session)
+        if confirm(f"after {label}, screen={gw.identify(session)}"):
+            pass
+
+    return login(
+        email, password,
+        session, gw, locator,
+        prefix, display,
+        confirm=confirm,
+    )
+
+
+def _ok_expired(session: Any, locator: Any = None) -> bool:
+    """Click OK on the startup_expired dialog (or skip if already past it)."""
+    from gt_spector.locator import Locator
+    loc = locator or Locator()
+    r = loc.find(session.frame, "start_expire_ok_static")
+    if not r.found:
+        return True
+    session.click(r.cx, r.cy)
+    return True
+
+
+def _open_game_login(session: Any, locator: Any) -> bool:
+    """Click the dynamic IGG account button on the game login page."""
+    r = locator.find(session.frame, "game_login_igg_account")
+    if not r.found:
+        return False
+    session.click(r.cx, r.cy)
+    return True
+
+
 class LoginFlow:
     def __init__(
         self,

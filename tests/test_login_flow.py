@@ -20,12 +20,38 @@ class FakeSession:
     def __init__(self):
         self.clicks = []
         self.display = ":13"
+        import numpy as np
+        self.frame = np.zeros((50, 50, 3), dtype=np.uint8)
     def refresh(self):
         pass
     def get_pixel(self, x, y):
         return (255, 255, 255)
     def click(self, x, y):
         self.clicks.append((x, y))
+
+
+def test_expired_login_flow(monkeypatch):
+    import gt_spector.typing as T
+    from gt_spector import login_flow as L
+
+    s = FakeSession()
+    gw = FakeGW()
+    seen = []
+    monkeypatch.setattr(T, "type_at", lambda *a, **k: True)
+
+    found = {"start_expire_ok_static": True, "game_login_igg_account": True}
+
+    class FakeLoc:
+        def find(self, frame, name):
+            return type("R", (), {"found": found.get(name, False), "cx": 100, "cy": 200})()
+
+    def confirm(msg):
+        seen.append(msg)
+        return True
+
+    result = L.expired_login("a@b.c", "pw", s, gw, FakeLoc(), "/p", ":13", confirm=confirm)
+    assert result == gw.identify(s)
+    assert (100, 200) in s.clicks  # OK + IGG button located clicks
 
 
 def test_window_click_uses_client_coords():

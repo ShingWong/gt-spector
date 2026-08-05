@@ -53,6 +53,27 @@ def test_do_change_account_wires_flow(monkeypatch):
     monkeypatch.setattr(s, "_bot_prefix", lambda: "/home/swong/dls/wineprefix_bots/bot04")
     s.do_change_account("sr02-07@mx1.us bamboo-H4")
     assert calls["account"] == ("sr02-07@mx1.us", "bamboo-H4")
+
+
+def test_do_expired_login_wires_function(monkeypatch):
+    from gt_spector import login_flow as L
+    from viewer import cli as cli_mod
+
+    calls = {}
+    def fake_expired_login(email, password, *a, **k):
+        calls["account"] = (email, password)
+        calls["kwargs"] = k
+        return "shelter_view"
+
+    monkeypatch.setattr(L, "expired_login", fake_expired_login)
+    s = object.__new__(cli_mod.CliSession)
+    s._session = type("S", (), {"display": ":15"})()
+    s._display = 15
+    s._gw = object()
+    s._locator = object()
+    monkeypatch.setattr(s, "_bot_prefix", lambda: "/home/swong/dls/wineprefix_bots/bot06")
+    s.do_expired_login("sr02-09@mx1.us bamboo-H4")
+    assert calls["account"] == ("sr02-09@mx1.us", "bamboo-H4")
     assert "confirm" in calls["kwargs"]
 
 
