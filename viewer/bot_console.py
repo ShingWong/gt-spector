@@ -119,26 +119,12 @@ class BotConsole:
             tmp.write_text(json.dumps({"w": w, "h": h, "x": x, "y": y}))
             os.replace(tmp, path)
 
-    def _load_accounts(self) -> dict[str, str]:
-        accounts: dict[str, str] = {}
-        try:
-            lines = ACCOUNTS_FILE.read_text().splitlines()
-        except (FileNotFoundError, OSError):
-            return accounts
-        for i, line in enumerate(lines):
-            line = line.strip()
-            if ":" in line:
-                email = line.split(":")[0].strip()
-                name = f"bot{i + 1:02d}"
-                accounts[name] = email
-        return accounts
+    def _parse_accounts(self) -> list[tuple[str, str]]:
+        """Read ACCOUNTS_FILE, mapping line order -> (bot name, email).
 
-    def _unprovisioned_accounts(self) -> list[tuple[str, str]]:
-        """Accounts (line order -> bot name) whose prefix is not provisioned.
-
-        Returns [(bot_name, email), ...] for accounts lacking a prefix with
-        drive_c. Accounts are mapped by line order (first -> bot01), never by
-        assuming the email is sequential.
+        Source of truth is the accounts file; bot name is line order (first
+        entry -> bot01, second -> bot02, ...), never the email itself.
+        Malformed lines yield no entry but still consume a line slot.
         """
         out: list[tuple[str, str]] = []
         try:
@@ -150,11 +136,24 @@ class BotConsole:
             if ":" not in line:
                 continue
             email = line.split(":")[0].strip()
-            name = f"bot{i + 1:02d}"
-            if (PREFIXES_DIR / name / "drive_c").exists():
-                continue
-            out.append((name, email))
+            out.append((f"bot{i + 1:02d}", email))
         return out
+
+    def _load_accounts(self) -> dict[str, str]:
+        return dict(self._parse_accounts())
+
+    def _unprovisioned_accounts(self) -> list[tuple[str, str]]:
+        """Accounts (line order -> bot name) whose prefix is not provisioned.
+
+        Returns [(bot_name, email), ...] for accounts lacking a prefix with
+        drive_c. Accounts are mapped by line order (first -> bot01), never by
+        assuming the email is sequential.
+        """
+        return [
+            (name, email)
+            for name, email in self._parse_accounts()
+            if not (PREFIXES_DIR / name / "drive_c").exists()
+        ]
 
     def _provision_n(self, count: int) -> None:
         """Provision the first `count` unprovisioned accounts, one at a time.
@@ -166,17 +165,21 @@ class BotConsole:
         for name, email in pending:
             self._status.config(text=f"Provisioning {name} ({email})...")
             self._tk.update()
-            r = subprocess.run(
-                ["python3", "-m", "gt_spector.provision", "init", name,
-                 "--account", email],
-                capture_output=True, text=True, timeout=600, check=False)
+            try:
+                r = subprocess.run(
+                    ["python3", "-m", "gt_spector.provision", "init", name,
+                     "--account", email],
+                    capture_output=True, text=True, timeout=600, check=False)
+            except (OSError, subprocess.TimeoutExpired) as e:
+                self._status.config(text=f"{name}: FAILED ({e})")
+                return
             if r.returncode != 0:
-                tail = (r.stderr or "").strip()[-60:]
+                tail = (r.stderr or r.stdout or "").strip()[-60:]
                 self._status.config(text=f"{name}: FAILED ({tail})")
                 return
             self._status.config(text=f"{name}: provisioned")
-        self._status.config(text=f"Provisioned {len(pending)} bot(s)")
         self._refresh_bots()
+        self._status.config(text=f"Provisioned {len(pending)} bot(s)")
 
     def _setup_menu(self) -> None:
         menubar = tk.Menu(self._tk)
@@ -742,8 +745,12 @@ class BotConsole:
             anchor=tk.W, padx=16)
 
         def run() -> None:
+            try:
+                n = count.get()
+            except tk.TclError:
+                return  # non-numeric input; keep the dialog open
             win.destroy()
-            self._provision_n(count.get())
+            self._provision_n(n)
 
         ttk.Button(win, text="Provision", command=run).pack(side=tk.LEFT, padx=12, pady=12)
         ttk.Button(win, text="Cancel", command=win.destroy).pack(

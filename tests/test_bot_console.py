@@ -795,8 +795,8 @@ def test_provision_n_sequential_and_stops_on_failure(tmp_path, monkeypatch):
         calls.append(cmd)
         name = cmd[cmd.index("init") + 1]
         if name == "bot03":  # fail on the 3rd
-            return type("R", (), {"returncode": 1, "stderr": ""})()
-        return type("R", (), {"returncode": 0})()
+            return type("R", (), {"returncode": 1, "stderr": "", "stdout": ""})()
+        return type("R", (), {"returncode": 0, "stderr": "", "stdout": ""})()
 
     monkeypatch.setattr(subprocess, "run", fake_run)
     c._status = type("S", (), {"config": lambda s, text: statuses.append(text)})()
@@ -807,3 +807,100 @@ def test_provision_n_sequential_and_stops_on_failure(tmp_path, monkeypatch):
     c._provision_n(4)
     # bot01, bot02 provisioned; bot03 failed -> stops, bot04 never run
     assert [x[x.index("init") + 1] for x in calls] == ["bot01", "bot02", "bot03"]
+
+
+def test_load_accounts_line_order(tmp_path, monkeypatch):
+    from viewer import bot_console as bc
+
+    accounts = tmp_path / "accounts"
+    accounts.write_text(
+        "sr02-04@mx1.us:bamboo-H4\n"
+        "malformed-no-colon\n"
+        "sr02-05@mx1.us:bamboo-H4\n"
+    )
+    monkeypatch.setattr(bc, "ACCOUNTS_FILE", accounts)
+    monkeypatch.setattr(bc, "PREFIXES_DIR", tmp_path / "prefixes")
+
+    c = make_console()
+    # Malformed lines yield no entry but still consume a line slot: the third
+    # line (sr02-05) maps to bot03.
+    assert c._load_accounts() == {
+        "bot01": "sr02-04@mx1.us",
+        "bot03": "sr02-05@mx1.us",
+    }
+
+
+def test_load_accounts_missing_file(tmp_path, monkeypatch):
+    from viewer import bot_console as bc
+
+    monkeypatch.setattr(bc, "ACCOUNTS_FILE", tmp_path / "nope")
+    assert make_console()._load_accounts() == {}
+
+
+def test_provision_n_slices_to_count(tmp_path, monkeypatch):
+    c = make_console()
+    calls = []
+
+    def fake_run(cmd, **kw):
+        calls.append(cmd)
+        return type("R", (), {"returncode": 0, "stderr": "", "stdout": ""})()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    c._status = type("S", (), {"config": lambda s, text: None})()
+    c._refresh_bots = lambda: None
+    c._tk = type("Tk", (), {"update": lambda s: None})()
+    c._unprovisioned_accounts = lambda: [
+        ("bot01", "a@x"), ("bot02", "b@x"), ("bot03", "c@x")]
+    c._provision_n(2)
+    # count < len(pending): only the first `count` are provisioned
+    assert [x[x.index("init") + 1] for x in calls] == ["bot01", "bot02"]
+
+
+def test_provision_n_success_refreshes_then_reports(tmp_path, monkeypatch):
+    c = make_console()
+    refreshed = []
+    statuses = []
+
+    def fake_run(cmd, **kw):
+        return type("R", (), {"returncode": 0, "stderr": "", "stdout": ""})()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    c._status = type("S", (), {"config": lambda s, text: statuses.append(text)})()
+    c._refresh_bots = lambda: refreshed.append(True)
+    c._tk = type("Tk", (), {"update": lambda s: None})()
+    c._unprovisioned_accounts = lambda: [("bot01", "a@x")]
+    c._provision_n(1)
+    assert refreshed == [True]
+    assert statuses[-1] == "Provisioned 1 bot(s)"
+
+
+def test_provision_n_failure_tail_falls_back_to_stdout(tmp_path, monkeypatch):
+    c = make_console()
+    statuses = []
+
+    def fake_run(cmd, **kw):
+        return type("R", (), {"returncode": 1, "stderr": "", "stdout": "out of memory"})
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    c._status = type("S", (), {"config": lambda s, text: statuses.append(text)})()
+    c._refresh_bots = lambda: None
+    c._tk = type("Tk", (), {"update": lambda s: None})()
+    c._unprovisioned_accounts = lambda: [("bot01", "a@x")]
+    c._provision_n(1)
+    assert statuses[-1] == "bot01: FAILED (out of memory)"
+
+
+def test_provision_n_handles_subprocess_error(tmp_path, monkeypatch):
+    c = make_console()
+    statuses = []
+
+    def boom(cmd, **kw):
+        raise OSError("python3 not found")
+
+    monkeypatch.setattr(subprocess, "run", boom)
+    c._status = type("S", (), {"config": lambda s, text: statuses.append(text)})()
+    c._refresh_bots = lambda: None
+    c._tk = type("Tk", (), {"update": lambda s: None})()
+    c._unprovisioned_accounts = lambda: [("bot01", "a@x")]
+    c._provision_n(1)
+    assert statuses[-1] == "bot01: FAILED (python3 not found)"
