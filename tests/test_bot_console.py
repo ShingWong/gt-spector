@@ -827,6 +827,12 @@ def test_provision_n_sequential_and_stops_on_failure(tmp_path, monkeypatch):
     c._tk = _tk_stub()
     c._unprovisioned_accounts = lambda: [
         ("bot01", "a@x"), ("bot02", "b@x"), ("bot03", "c@x"), ("bot04", "d@x")]
+    c._login_password = lambda email: "pw"
+    c._boot_and_login = lambda bot, email, password: "shelter_view"
+    c._manager = type("M", (), {
+        "get": lambda self, n: type("B", (), {"name": n})(),
+        "start_game": lambda self, b: None,
+    })()
     c._provision_n(4)
     # bot01, bot02 provisioned; bot03 failed -> stops, bot04 never run
     assert [x[x.index("init") + 1] for x in calls] == ["bot01", "bot02", "bot03"]
@@ -875,6 +881,12 @@ def test_provision_n_slices_to_count(tmp_path, monkeypatch):
     c._tk = _tk_stub()
     c._unprovisioned_accounts = lambda: [
         ("bot01", "a@x"), ("bot02", "b@x"), ("bot03", "c@x")]
+    c._login_password = lambda email: "pw"
+    c._boot_and_login = lambda bot, email, password: "shelter_view"
+    c._manager = type("M", (), {
+        "get": lambda self, n: type("B", (), {"name": n})(),
+        "start_game": lambda self, b: None,
+    })()
     c._provision_n(2)
     # count < len(pending): only the first `count` are provisioned
     assert [x[x.index("init") + 1] for x in calls] == ["bot01", "bot02"]
@@ -894,6 +906,12 @@ def test_provision_n_success_refreshes_then_reports(tmp_path, monkeypatch):
     c._refresh_bots = lambda: refreshed.append(True)
     c._tk = _tk_stub()
     c._unprovisioned_accounts = lambda: [("bot01", "a@x")]
+    c._login_password = lambda email: "pw"
+    c._boot_and_login = lambda bot, email, password: "shelter_view"
+    c._manager = type("M", (), {
+        "get": lambda self, n: type("B", (), {"name": n})(),
+        "start_game": lambda self, b: None,
+    })()
     c._provision_n(1)
     assert refreshed == [True]
     assert statuses[-1] == "Provisioned 1 bot(s)"
@@ -912,6 +930,12 @@ def test_provision_n_failure_tail_falls_back_to_stdout(tmp_path, monkeypatch):
     c._refresh_bots = lambda: None
     c._tk = _tk_stub()
     c._unprovisioned_accounts = lambda: [("bot01", "a@x")]
+    c._login_password = lambda email: "pw"
+    c._boot_and_login = lambda bot, email, password: "shelter_view"
+    c._manager = type("M", (), {
+        "get": lambda self, n: type("B", (), {"name": n})(),
+        "start_game": lambda self, b: None,
+    })()
     c._provision_n(1)
     assert statuses[-1] == "bot01: FAILED (out of memory)"
 
@@ -929,6 +953,12 @@ def test_provision_n_handles_subprocess_error(tmp_path, monkeypatch):
     c._refresh_bots = lambda: None
     c._tk = _tk_stub()
     c._unprovisioned_accounts = lambda: [("bot01", "a@x")]
+    c._login_password = lambda email: "pw"
+    c._boot_and_login = lambda bot, email, password: "shelter_view"
+    c._manager = type("M", (), {
+        "get": lambda self, n: type("B", (), {"name": n})(),
+        "start_game": lambda self, b: None,
+    })()
     c._provision_n(1)
     assert statuses[-1] == "bot01: FAILED (python3 not found)"
 
@@ -1048,6 +1078,12 @@ def test_provision_n_uses_sys_executable(monkeypatch):
 
     monkeypatch.setattr(bc.subprocess, "run", fake_run)
     c._unprovisioned_accounts = lambda: [("bot09", "a@x")]
+    c._login_password = lambda email: "pw"
+    c._boot_and_login = lambda bot, email, password: "shelter_view"
+    c._manager = type("M", (), {
+        "get": lambda self, n: type("B", (), {"name": n})(),
+        "start_game": lambda self, b: None,
+    })()
     c._refresh_bots = lambda: None
     c._status = type("S", (), {"config": lambda s, **k: None})()
     c._tk = type("Tk", (), {"after": lambda s, ms, fn: None, "update": lambda s: None})()
@@ -1055,3 +1091,43 @@ def test_provision_n_uses_sys_executable(monkeypatch):
     c._provision_n(1)
     time.sleep(0.2)  # let the background thread run
     assert called["cmd"][0] == "/venv/bin/python3"
+
+
+def test_provision_n_starts_and_logs_in_after_init(monkeypatch):
+    from viewer import bot_console as bc
+
+    c = make_console()
+    calls = []
+
+    def fake_run(cmd, **kw):
+        calls.append(("run", cmd[0], cmd[cmd.index("init") + 1]))
+        return type("R", (), {"returncode": 0, "stderr": "", "stdout": ""})()
+
+    monkeypatch.setattr(bc.subprocess, "run", fake_run)
+    c._unprovisioned_accounts = lambda: [("bot09", "sr02-12@mx1.us")]
+    c._login_password = lambda email: "bamboo-H4"
+    bot_obj = type("B", (), {"name": "bot09", "display": 18})()
+    c._manager = type("M", (), {
+        "get": lambda self, n: bot_obj,
+        "start_game": lambda self, b: calls.append(("start", b.name)),
+    })()
+    c._boot_and_login = lambda bot, email, password: (
+        calls.append(("login", bot.name, email, password)) or "shelter_view")
+    c._refresh_bots = lambda: None
+    c._status = type("S", (), {"config": lambda s, **k: None})()
+    c._tk = type("Tk", (), {"after": lambda s, ms, fn: None})()
+
+    c._provision_n(1)
+    time.sleep(0.2)
+    assert ("run", bc.sys.executable, "bot09") in calls
+    assert ("start", "bot09") in calls
+    assert ("login", "bot09", "sr02-12@mx1.us", "bamboo-H4") in calls
+
+
+def test_login_password_reads_accounts_file(tmp_path, monkeypatch):
+    from viewer import bot_console as bc
+
+    acct = tmp_path / "accounts"
+    acct.write_text("sr02-12@mx1.us:bamboo-H4\nother@x:pw2\n")
+    monkeypatch.setattr(bc, "ACCOUNTS_FILE", acct)
+    assert bc.BotConsole._login_password(None, "sr02-12@mx1.us") == "bamboo-H4"

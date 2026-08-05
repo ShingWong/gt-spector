@@ -11,7 +11,7 @@ from typing import Any, cast
 
 import numpy as np
 
-from gt_spector import audio, logs, monitor, overlay, settings
+from gt_spector import audio, login_flow, logs, monitor, overlay, settings
 from gt_spector.bot_manager import Bot, BotManager, BotState
 from gt_spector.monitor import BotMonitor
 from gt_spector.script import ScriptRunner
@@ -159,6 +159,47 @@ class BotConsole:
             if not (PREFIXES_DIR / name / "drive_c").exists()
         ]
 
+    def _login_password(self, email: str) -> str:
+        """Password for an account email from the accounts file."""
+        try:
+            for line in ACCOUNTS_FILE.read_text().splitlines():
+                if line.startswith(email + ":"):
+                    return line.split(":", 1)[1].strip()
+        except (FileNotFoundError, OSError):
+            pass
+        return ""
+
+    def _boot_and_login(self, bot, email: str, password: str) -> str:
+        """Wait for boot, then log the bot in. Returns final screen."""
+        from gt_spector.game_world import GameWorld
+        from gt_spector.locator import Locator
+        from gt_spector.session import Session
+
+        gw = GameWorld()
+        locator = Locator()
+        gw.set_locator(locator)
+
+        import time as _t
+        session = Session(f":{bot.display}", source=f"shm://{bot.display}")
+        boot_deadline = _t.monotonic() + 120
+        screen = None
+        while _t.monotonic() < boot_deadline:
+            _t.sleep(3)
+            try:
+                session.refresh()
+                screen = gw.identify(session)
+            except Exception:  # noqa: BLE001 - boot in progress
+                screen = None
+            if screen in ("startup_expired", "game_login", "igg_login",
+                          "another_login_disconnect") or screen is not None:
+                break
+        if screen is None:
+            return "error: no login screen after boot"
+        return login_flow.expired_login(
+            email, password, session, gw, locator,
+            bot.prefix, f":{bot.display}",
+        )
+
     def _provision_n(self, count: int) -> None:
         """Provision the first `count` unprovisioned accounts, one at a time.
 
@@ -188,7 +229,20 @@ class BotConsole:
                     tail = (r.stderr or r.stdout or "").strip()[-60:]
                     _set_status(f"{name}: FAILED ({tail})")
                     return
-                _set_status(f"{name}: provisioned")
+                _set_status(f"{name}: provisioned, starting...")
+                bot = self._manager.get(name)
+                if bot is None:
+                    _set_status(f"{name}: FAILED (no bot)")
+                    return
+                self._manager.start_game(bot)
+                password = self._login_password(email)
+                result = self._boot_and_login(bot, email, password)
+                if result in ("in_game", "shelter_view", "world_map",
+                              "start_norah", "glory_league_event", None):
+                    _set_status(f"{name}: logged in")
+                else:
+                    _set_status(f"{name}: login failed ({result})")
+                    return
             self._tk.after(0, self._refresh_bots)
             _set_status(f"Provisioned {len(pending)} bot(s)")
 
