@@ -972,3 +972,39 @@ def test_monitor_one_uses_worker_locator_for_detect(monkeypatch):
         seen.update({"gw": gw, "locator": locator}) or None)
     c._monitor_one(bot)
     assert seen["gw"] is not None and seen["locator"] is not None
+
+
+def test_on_tree_select_does_not_call_update_rows():
+    c = make_console()
+    calls = []
+    c._update_rows = lambda: calls.append("rows")
+    c._update_selection_only = lambda: calls.append("sel")
+    c._on_tree_select()
+    assert calls == ["sel"]  # must NOT call the full update_rows
+
+
+def test_update_selection_only_rewrites_sel_column():
+    c = make_console()
+    rows = {}
+
+    class FakeTree:
+        def selection(self):
+            return ("bot02",)
+
+        def exists(self, iid):
+            return iid in rows
+
+        def item(self, iid, option=None, **kw):
+            if kw:
+                rows[iid] = list(kw["values"])
+            return rows.get(iid)
+
+    c._tree = FakeTree()
+    # seed two rows
+    rows["bot01"] = ["☐", "bot01", "a@x", ":10", "● Running", "", "", "", "", "", "", "", "", "", "[View]"]
+    rows["bot02"] = ["☐", "bot02", "b@x", ":11", "● Running", "", "", "", "", "", "", "", "", "", "[View]"]
+    c._manager = type("M", (), {"bots": [make_bot(name="bot01"), make_bot(name="bot02")]})()
+    c._update_selection_only()
+    # bot02 selected -> ☑; bot01 not selected -> stays ☐
+    assert rows["bot01"][0] == "☐"
+    assert rows["bot02"][0] == "☑"

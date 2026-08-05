@@ -503,7 +503,27 @@ class BotConsole:
         self._tree.selection_set(*selected)
 
     def _on_tree_select(self, _event: Any = None) -> None:
-        self._update_rows()
+        self._update_selection_only()
+
+    def _update_selection_only(self) -> None:
+        """Re-render only the ☑/☐ selection column after a selection change.
+
+        The full _update_rows (stats, location detection, tooltips) is
+        expensive and already runs on the 2s poll; a selection only changes
+        the checkbox glyph, so update that alone for instant feedback.
+        """
+        selected = set(self._tree.selection())
+        for bot in self._manager.bots:
+            if not self._tree.exists(bot.name):
+                continue
+            try:
+                values = list(self._tree.item(bot.name, "values") or ())
+            except Exception:  # noqa: BLE001, S112 - a missing row must not abort
+                continue
+            if not values:
+                continue
+            values[0] = "☑" if bot.name in selected else "☐"
+            self._tree.item(bot.name, values=tuple(values))
 
     def _on_tree_double_click(self, event: Any) -> None:
         iid = self._tree.identify_row(event.y)
