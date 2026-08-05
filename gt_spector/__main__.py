@@ -44,6 +44,23 @@ def apply_in_game_settings(session: Any, settings_str: str, gw: Any, navigator: 
     return 0
 
 
+POWER_ACTIONS = {"start", "stop", "restart", "start_all", "stop_all", "restart_all"}
+
+
+def _parse_power_args(argv: list[str]) -> tuple[str, str] | None:
+    """Return (action, target) for power subcommands, else None."""
+    if not argv:
+        return None
+    token = argv[0]
+    if token in ("start_all", "stop_all", "restart_all"):
+        return (token[:-4], "all")
+    if token in ("start", "stop", "restart"):
+        if len(argv) < 2:
+            return None
+        return (token, argv[1])
+    return None
+
+
 def main() -> None:
     from .session import Session
 
@@ -57,6 +74,16 @@ def main() -> None:
             for s in sessions:
                 print(f"{s['id']:<6} {s['frame']:<10} {s['width']}x{s['height']:<6}")
         sys.exit(0)
+
+    power = _parse_power_args(sys.argv[1:])
+    if power is not None:
+        from gt_spector.bot_manager import BotManager
+        from gt_spector.power import run_power_command
+
+        manager = BotManager()
+        manager.load_from_prefixes()
+        action, target = power
+        sys.exit(run_power_command(manager, action, target))
 
     parser = argparse.ArgumentParser(description="gt-spector: game testing inspector")
     parser.add_argument("--session", default=":9", help="DISPLAY target")
