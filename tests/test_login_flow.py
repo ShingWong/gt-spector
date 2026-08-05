@@ -46,10 +46,10 @@ def test_login_uses_eye_derived_positions(monkeypatch):
     import gt_spector.typing as T
     from gt_spector import login_flow as L
     calls = []
-    def fake_type(prefix, display, text, x, y):
-        calls.append((text, x, y))
+    def fake_type(prefix, display, text):
+        calls.append((prefix, text))
         return True
-    monkeypatch.setattr(T, "type_at", fake_type)
+    monkeypatch.setattr(T, "type_text", fake_type)
     monkeypatch.setattr(L.time, "sleep", lambda *a, **k: None)
 
     s = FakeSession()
@@ -57,14 +57,15 @@ def test_login_uses_eye_derived_positions(monkeypatch):
     result = L.login("a@b.c", "pw", s, gw, FakeLoc(eye=(880, 226)), "/p", ":13",
                      confirm=lambda m: True)
     assert result == "settings"
-    assert ("{CtrlA}a@b.c", 365, 126) in calls
-    assert ("{CtrlA}pw", 365, 226) in calls
+    # email 100 above eye, password aligned — both typed text-only
+    assert ("/p", "{CtrlA}a@b.c") in calls
+    assert ("/p", "{CtrlA}pw") in calls
 
 
 def test_state_machine_reaches_browser_login(monkeypatch):
     import gt_spector.typing as T
     from gt_spector import login_flow as L
-    monkeypatch.setattr(T, "type_at", lambda *a, **k: True)
+    monkeypatch.setattr(T, "type_text", lambda *a, **k: True)
     monkeypatch.setattr(L.time, "sleep", lambda *a, **k: None)
 
     s = FakeSession()
@@ -112,7 +113,7 @@ def test_change_account_full_sequence(monkeypatch):
         seen.append(msg)
         return True
     flow = LoginFlow(s, gw, FakeLoc(eye=(880, 226)), "/p", ":13", confirm=confirm)
-    monkeypatch.setattr(T, "type_at", lambda *a, **k: True)
+    monkeypatch.setattr(T, "type_text", lambda *a, **k: True)
     monkeypatch.setattr(L.time, "sleep", lambda *a, **k: None)
 
     result = flow.change_account("a@b.c", "pw")

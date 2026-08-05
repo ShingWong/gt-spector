@@ -29,6 +29,24 @@ def test_type_at_invokes_sendtext(monkeypatch):
     assert env["HOME"] == os.environ["HOME"]
 
 
+def test_type_text_invokes_sendtext_without_coords(monkeypatch):
+    from gt_spector import typing as T
+
+    calls = []
+    def fake_run(cmd, env=None, **kw):
+        calls.append((cmd, env))
+        return FakeResult()
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    ok = T.type_text("/home/swong/dls/wineprefix_bots/bot04", ":13", "{CtrlA}sr02-07@mx1.us")
+    assert ok is True
+    assert len(calls) == 1
+    cmd, env = calls[0]
+    assert cmd[-1] == "{CtrlA}sr02-07@mx1.us"
+    assert len(cmd) == 3  # wine sendtext.exe <text> — no coords
+    assert env["WINEPREFIX"] == "/home/swong/dls/wineprefix_bots/bot04"
+
+
 def test_type_at_reports_failure(monkeypatch):
     from gt_spector import typing as T
 

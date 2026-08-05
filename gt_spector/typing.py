@@ -30,3 +30,16 @@ def _run(prefix: str, display: str, text: str, x: int, y: int) -> bool:
 def type_at(prefix: str, display: str, text: str, x: int, y: int) -> bool:
     """Click (x,y) and type `text` via sendtext.exe."""
     return _run(prefix, display, text, x, y)
+
+
+def type_text(prefix: str, display: str, text: str) -> bool:
+    """Type `text` via sendtext.exe without clicking (field already focused)."""
+    env = {**os.environ, "WINEPREFIX": prefix, "DISPLAY": display}
+    try:
+        r = subprocess.run(
+            [WINE, SENDTEXT, text],
+            env=env, capture_output=True, timeout=30, check=False,
+        )
+    except (subprocess.TimeoutExpired, OSError, subprocess.SubprocessError):
+        return False
+    return r.returncode == 0

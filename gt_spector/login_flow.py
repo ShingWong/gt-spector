@@ -35,8 +35,16 @@ def _window_click(session: Any, x: int, y: int) -> bool:
     return True
 
 
-def _type(prefix: str, display: str, text: str, x: int, y: int) -> bool:
-    return typing.type_at(prefix, display, f"{{CtrlA}}{text}", x, y)
+def _type(session: Any, prefix: str, display: str, text: str, x: int, y: int) -> bool:
+    # Click the field via xdotool (the browser registers xdotool clicks), then
+    # send text via the wine helper (text-only, no click — the click already
+    # focused the field, and the helper re-clicking would steal focus).
+    if text:
+        session.click(x, y)
+        time.sleep(2)
+        return typing.type_text(prefix, display, f"{{CtrlA}}{text}")
+    session.click(x, y)
+    return True
 
 
 def _wait(session: Any, seconds: float = 4.0) -> None:
@@ -84,14 +92,14 @@ def login(
     login_pos = (EMAIL_X, ey + LOGIN_Y_BELOW_EYE)
 
     steps: list[tuple[str, Callable[[], bool]]] = [
-        ("enter email", lambda: _type(prefix, display, email, *email_pos)),
-        ("enter password", lambda: _type(prefix, display, password, *pass_pos)),
-        ("reveal password", lambda: _window_click(session, *eye)),
-        ("hide password", lambda: _window_click(session, *eye)),
-        ("submit login", lambda: _submit_login(session, login_pos)),
-        ("continue after login", lambda: _window_click(session, *CONTINUE)),
-        ("select id", lambda: _select_id(session)),
-        ("confirm ok", lambda: _window_click(session, *OK)),
+        ("enter email", lambda: _type(session, prefix, display, email, *email_pos)),
+        ("enter password", lambda: _type(session, prefix, display, password, *pass_pos)),
+        ("reveal password", lambda: _type(session, prefix, display, "", *eye)),
+        ("hide password", lambda: _type(session, prefix, display, "", *eye)),
+        ("submit login", lambda: _type(session, prefix, display, "", *login_pos)),
+        ("continue after login", lambda: _type(session, prefix, display, "", *CONTINUE)),
+        ("select id", lambda: _type(session, prefix, display, "", *SELECT_ID)),
+        ("confirm ok", lambda: _type(session, prefix, display, "", *OK)),
     ]
     for label, fn in steps:
         if not confirm(label):
