@@ -20,6 +20,8 @@ from gt_spector.scripts.navigate_bot import NavigateBot
 ACCOUNTS_FILE = Path("/home/swong/dls/src/ahk/accounts")
 PREFIXES_DIR = Path("/home/swong/dls/wineprefix_bots")
 
+MONITOR_INTERVAL = 2.0
+
 
 class _VlmAdapter:
     """Thin wrapper around gt_spector.vlm (WIP module); degrades to None via _make_vlm."""
@@ -84,6 +86,7 @@ class BotConsole:
         self._setup_statusbar()
         self._setup_bot_list()
 
+        self._start_monitor_worker()
         self._poll()
         self._tk.protocol("WM_DELETE_WINDOW", self._on_close)
         if settings.vlm_enabled():
@@ -765,6 +768,26 @@ class BotConsole:
         self._status = ttk.Label(self._tk, text="Ready", relief=tk.SUNKEN, anchor=tk.W)
         self._status.pack(side=tk.BOTTOM, fill=tk.X)
 
+    def _start_monitor_worker(self) -> None:
+        """Background daemon thread running the monitor tick.
+
+        check_responsiveness sleeps ~0.4s per running bot (sampling SHM
+        counters), which would freeze the Tk UI if run on the main thread.
+        Run it on a daemon thread so the UI poll only does the quick row
+        update. Stops when the console closes (via _vlm_stop).
+        """
+        import threading
+
+        def worker() -> None:
+            while not self._vlm_stop:
+                time.sleep(MONITOR_INTERVAL)
+                try:
+                    self._monitor_tick()
+                except Exception as e:  # noqa: BLE001 - never kill the worker
+                    logs.log_system(f"monitor worker error: {e}")
+
+        threading.Thread(target=worker, daemon=True).start()
+
     def _start_vlm_worker(self) -> None:
         """Background thread: classify running bots on the settable interval."""
         import threading
@@ -879,7 +902,6 @@ class BotConsole:
     def _poll(self) -> None:
         self._nav_cache = None
         self._update_rows()
-        self._monitor_tick()
         self._tk.after(2000, self._poll)
 
     def _on_close(self) -> None:

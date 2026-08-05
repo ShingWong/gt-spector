@@ -904,3 +904,15 @@ def test_provision_n_handles_subprocess_error(tmp_path, monkeypatch):
     c._unprovisioned_accounts = lambda: [("bot01", "a@x")]
     c._provision_n(1)
     assert statuses[-1] == "bot01: FAILED (python3 not found)"
+
+
+def test_poll_does_not_run_monitor_tick(monkeypatch):
+    """The UI poll must not block on the monitor (it runs on a background thread)."""
+    c = make_console()
+    c._nav_cache = None
+    calls = []
+    c._update_rows = lambda: calls.append("rows")
+    c._tk = type("Tk", (), {"after": lambda self, ms, fn: None})()
+    c._monitor_tick = lambda: calls.append("tick")
+    c._poll()
+    assert calls == ["rows"]  # tick must NOT be called from the UI poll
