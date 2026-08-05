@@ -88,6 +88,15 @@ class Navigator:
             current = self._recover_esc()
             if current is None:
                 return None
+        if current == "unknown_screen_with_back_button":
+            from gt_spector.popups import exit_popups
+
+            if exit_popups(self._session, self._locator, current):
+                time.sleep(0.5)
+                self._session.refresh()
+                current = self._gw.identify(self._session)
+                if current == target:
+                    return target
 
         for _ in range(MAX_ESC + 1):
             if self._is_esc_advance(current):

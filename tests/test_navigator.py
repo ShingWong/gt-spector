@@ -273,6 +273,57 @@ def test_goto_esc_advance_to_unknown_then_recompute():
     assert s.esc_count == 1
 
 
+def test_goto_exits_unknown_back_button_screen_via_popups(monkeypatch):
+    """goto from unknown_screen_with_back_button must exit via exit_popups
+    (back-button click) and re-identify, not return None without recovery."""
+    from gt_spector import navigator as navmod
+    from gt_spector.navigator import Navigator
+    monkeypatch.setattr(navmod.time, "sleep", lambda *a, **k: None)
+
+    class PBGW:
+        def __init__(self):
+            self.screens = {"a": "a", "b": "b"}
+            self.navigation = {"a": {"b": {"action": "click", "location": "b_btn"}}}
+            self._locator = None
+
+        def identify(self, session):
+            return session.name
+
+        def _resolve_hop(self, session, screen, target):
+            session.name = target
+            return True
+
+    class PBSession:
+        def __init__(self):
+            self.name = "unknown_screen_with_back_button"
+            self.frame = np.zeros((50, 50, 3), dtype=np.uint8)
+            self.clicks = []
+            self.back_clicked = False
+
+        def refresh(self):
+            # After the back-button exit, the popup clears to the shelter view.
+            if self.name == "unknown_screen_with_back_button" and self.back_clicked:
+                self.name = "a"
+
+        def click(self, x, y):
+            self.clicks.append((x, y))
+            self.back_clicked = True
+
+        def key_press(self, key):
+            pass
+
+    class FakeLoc:
+        def find(self, frame, name):
+            return type("R", (), {"found": True, "cx": 10, "cy": 20})()
+
+    gw = PBGW()
+    s = PBSession()
+    n = Navigator(gw, FakeLoc(), s)
+    result = n.goto("b")
+    assert result == "b"
+    assert (10, 20) in s.clicks
+
+
 def test_goto_trace_reports_hops(monkeypatch):
     # reuse FakeGW/FakeSession/_nav from the existing file
     from gt_spector import navigator as navmod
