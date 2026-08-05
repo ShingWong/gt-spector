@@ -66,6 +66,8 @@ class GameWorld:
         detection is preferred (robust to brightness/overlay changes); pixel
         probes are the fallback.
         """
+        if self._locator is None:
+            self._ensure_locator()
         for name, spec in self.screens.items():
             if spec.get("templates"):
                 if self._locator is not None and self._templates_match(session, spec["templates"]):
@@ -77,6 +79,11 @@ class GameWorld:
             if self._matches(session, fp):
                 return name
         return None
+
+    def _ensure_locator(self) -> None:
+        from gt_spector.locator import Locator
+
+        self._locator = Locator()
 
     def _templates_match(self, session: Any, templates: list[str]) -> bool:
         for tname in templates:

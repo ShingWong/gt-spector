@@ -54,3 +54,23 @@ def test_login_screen_templates_exist_in_store():
     }
     available = {t.name for t in _t.load_templates()}
     assert names <= available
+
+
+def test_identify_self_initializes_locator(monkeypatch):
+    from gt_spector import locator as locator_mod
+    from gt_spector.game_world import GameWorld
+
+    created = []
+    class FakeLocator:
+        def __init__(self):
+            created.append(self)
+        def find(self, frame, name):
+            return _FakeLocate(False)
+    monkeypatch.setattr(locator_mod, "Locator", FakeLocator)
+
+    gw = GameWorld()
+    assert gw._locator is None
+    session = type("S", (), {"frame": object()})()
+    gw.identify(session)
+    # identify lazily created a locator instead of skipping template screens
+    assert len(created) == 1
