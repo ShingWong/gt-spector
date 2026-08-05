@@ -30,6 +30,16 @@ class FakeSession:
         self.clicks.append((x, y))
 
 
+class FakeLoc:
+    """Finds the eye icon; used by login() position derivation."""
+    def __init__(self, eye=(880, 226), found_names=()):
+        self._eye = eye
+        self._found_names = set(found_names)
+    def find(self, frame, name):
+        found = name in self._found_names or name == "igg_login_eye2_static"
+        return type("R", (), {"found": found, "cx": self._eye[0], "cy": self._eye[1]})()
+
+
 def test_expired_login_flow(monkeypatch):
     import gt_spector.typing as T
     from gt_spector import login_flow as L
@@ -43,7 +53,8 @@ def test_expired_login_flow(monkeypatch):
 
     class FakeLoc:
         def find(self, frame, name):
-            return type("R", (), {"found": found.get(name, False), "cx": 100, "cy": 200})()
+            ok = found.get(name, False) or name == "igg_login_eye2_static"
+            return type("R", (), {"found": ok, "cx": 100, "cy": 200})()
 
     def confirm(msg):
         seen.append(msg)
@@ -72,7 +83,7 @@ def test_change_account_full_sequence(monkeypatch):
     def confirm(msg):
         seen.append(msg)
         return True
-    flow = LoginFlow(s, gw, None, "/p", ":13", confirm=confirm)
+    flow = LoginFlow(s, gw, FakeLoc(eye=(880, 226)), "/p", ":13", confirm=confirm)
     monkeypatch.setattr(T, "type_at", lambda *a, **k: True)
     monkeypatch.setattr(L.time, "sleep", lambda *a, **k: None)
 
@@ -84,7 +95,7 @@ def test_change_account_full_sequence(monkeypatch):
         "continue after login", "select id", "confirm ok",
     ]
     assert s.clicks == [
-        (735, 262), (885, 195), (885, 195), (462, 258),
+        (735, 262), (880, 226), (880, 226), (365, 296),
         (500, 300), (350, 165), (700, 560),
     ]
 

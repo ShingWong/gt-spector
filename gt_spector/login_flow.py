@@ -17,10 +17,13 @@ from typing import Any
 from gt_spector import typing
 from gt_spector.game_world import GameWorld
 
-EMAIL = (365, 156)
-PASSWORD = (365, 226)
-EYE = (885, 195)
-LOGIN_BTN = (462, 258)
+EMAIL_X = 365
+PASSWORD_X = 365
+LOGIN_X = 365
+EYE_TEMPLATES = ("igg_login_eye2_static", "login_eye_static")
+EYE_X_OFFSET = 0
+EMAIL_Y_ABOVE_EYE = 100
+LOGIN_Y_BELOW_EYE = 70
 CONTINUE = (500, 300)
 SELECT_ID = (350, 165)
 OK = (700, 560)
@@ -40,6 +43,21 @@ def _wait(session: Any, seconds: float = 4.0) -> None:
     session.refresh()
 
 
+def _find_eye(locator: Any, session: Any) -> tuple[int, int] | None:
+    """Locate the password-reveal eye icon (position varies by page render).
+
+    Both eye versions have been seen across page renders, so try each.
+    """
+    if locator is None:
+        from gt_spector.locator import Locator
+        locator = Locator()
+    for name in EYE_TEMPLATES:
+        r = locator.find(session.frame, name)
+        if r.found:
+            return (r.cx, r.cy)
+    return None
+
+
 def login(
     email: str,
     password: str,
@@ -56,15 +74,27 @@ def login(
     expired session, or after change_account opens the browser) and drives
     through email, password, submit, continue, select ID, and confirm. Returns
     the final screen name, or "cancelled" / "error".
+
+    The login page's title/background shifts between renders, so the field
+    positions move. They are derived from the password-reveal eye icon, which
+    is locatable: email is 100px above the eye, password aligned with it, and
+    the login button 70px below it (all at x=365, inside the wide fields).
     """
     confirm = confirm or (lambda _msg: True)
+    eye = _find_eye(locator, session)
+    if eye is None:
+        return "error: eye icon not found"
+    _, ey = eye
+    email_pos = (EMAIL_X, ey - EMAIL_Y_ABOVE_EYE)
+    pass_pos = (EMAIL_X, ey)
+    login_pos = (EMAIL_X, ey + LOGIN_Y_BELOW_EYE)
 
     steps: list[tuple[str, Callable[[], bool]]] = [
-        ("enter email", lambda: _type(prefix, display, email, *EMAIL)),
-        ("enter password", lambda: _type(prefix, display, password, *PASSWORD)),
-        ("reveal password", lambda: _window_click(session, *EYE)),
-        ("hide password", lambda: _window_click(session, *EYE)),
-        ("submit login", lambda: _submit_login(session)),
+        ("enter email", lambda: _type(prefix, display, email, *email_pos)),
+        ("enter password", lambda: _type(prefix, display, password, *pass_pos)),
+        ("reveal password", lambda: _window_click(session, *eye)),
+        ("hide password", lambda: _window_click(session, *eye)),
+        ("submit login", lambda: _submit_login(session, login_pos)),
         ("continue after login", lambda: _window_click(session, *CONTINUE)),
         ("select id", lambda: _select_id(session)),
         ("confirm ok", lambda: _window_click(session, *OK)),
@@ -78,8 +108,8 @@ def login(
     return gw.identify(session) or "unknown"
 
 
-def _submit_login(session: Any) -> bool:
-    session.click(*LOGIN_BTN)
+def _submit_login(session: Any, login_pos: tuple[int, int]) -> bool:
+    session.click(*login_pos)
     _wait(session, 5)
     return True
 
@@ -131,13 +161,17 @@ def expired_login(
 
 
 def _ok_expired(session: Any, locator: Any = None) -> bool:
-    """Click OK on the startup_expired dialog (or skip if already past it)."""
-    from gt_spector.locator import Locator
-    loc = locator or Locator()
-    r = loc.find(session.frame, "start_expire_ok_static")
-    if not r.found:
-        return True
-    session.click(r.cx, r.cy)
+    """Dismiss the startup_expired dialog (click OK, or More if that shows).
+
+    The expired-session dialog shows either an OK button or a More button
+    depending on state; both lead toward the game login page.
+    """
+    loc = locator or _new_locator()
+    for name in ("start_expire_ok_static", "start_expire_more_static"):
+        r = loc.find(session.frame, name)
+        if r.found:
+            session.click(r.cx, r.cy)
+            return True
     return True
 
 
@@ -148,6 +182,11 @@ def _open_game_login(session: Any, locator: Any) -> bool:
         return False
     session.click(r.cx, r.cy)
     return True
+
+
+def _new_locator():
+    from gt_spector.locator import Locator
+    return Locator()
 
 
 class LoginFlow:
