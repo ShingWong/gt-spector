@@ -2,9 +2,9 @@
 """CLI tool to create and manage isolated game prefixes for bot instances.
 
 Each prefix is a clean game install (game + DXVK + browser DLL + fonts +
-resolution). Accounts log in directly through the game's embedded browser
-— no registry/appdata/VITAL copying is needed; the game writes its own
-session after login.
+resolution) plus the master IGG appdata (asset cache + tutorial-complete
+registry state). The game boots to an expired-session/login screen; log the
+bot into its real account via the embedded browser (change_account).
 
 Usage:
   provision.py init <name> [--account <email>]   Create a fresh prefix
@@ -16,12 +16,12 @@ import argparse
 import os
 import shutil
 import subprocess
-import sys
 import tempfile
 import time
 
 BASE_DIR = "/home/swong/dls/wineprefix_bots"
 GAME_BASE = "/home/swong/dls/game-base/Doomsday_1.59.0"
+MASTER_APPDATA = "/home/swong/dls/game-base/IGG-appdata-master"
 WINE_BIN = "/opt/wine-proton/bin/wine"
 WINEBOOT = "/opt/wine-proton/bin/wineboot"
 PROTON_SRC = "/home/swong/dls/wineprefix_proton"
@@ -136,6 +136,8 @@ def cmd_init(name: str, account: str | None = None):
     print("Copying game files...")
     _copy_game_tree(GAME_BASE, ver_dir)
 
+    _copy_master_appdata(dest)
+
     src_x86 = os.path.join(DXVK_SRC, "d3d11", "d3d11.dll"), os.path.join(DXVK_SRC, "dxgi", "dxgi.dll")
     dst_x86 = os.path.join(dest, "drive_c", "windows", "system32")
     for dll in src_x86:
@@ -155,9 +157,7 @@ def cmd_init(name: str, account: str | None = None):
     _install_fonts(dest)
     os.makedirs(os.path.join(dest, "dxvk-cache"), exist_ok=True)
 
-    _apply_standard_settings(name, dest)
-
-    print(f"✓ Prefix {name} ready (login via the in-game browser)")
+    print(f"✓ Prefix {name} ready (boots to expired-session; log in via the in-game browser)")
     return {
         "name": name,
         "account": account,
@@ -166,74 +166,31 @@ def cmd_init(name: str, account: str | None = None):
     }
 
 
-_STANDARD_SETTINGS = "graphics-quality=low,frame-rate=low,sound-effects=off,background-music=off"
+def _copy_master_appdata(dest: str) -> None:
+    """Copy the master IGG appdata (asset bundles + tutorial-complete state).
 
-
-def _apply_standard_settings(name: str, dest: str) -> None:
-    """Start the game, apply the standard in-game config, then stop it.
-
-    Fresh prefixes start with the game defaults (high/mid/on/on), which
-    waste GPU. Launching the game once and driving the in-game settings
-    screen to the standard values makes every provisioned bot consistent.
+    New prefixes get bot06's appdata: the full `ab/` asset cache (so the game
+    does not re-download ~3GB), plus the tutorial-complete/guest-unlinked
+    registry state. The game then boots to the expired-session/login screen,
+    ready for a browser login to the bot's real account.
     """
-    try:
-        n = int(name.replace("bot", ""))
-        display = 9 + n
-    except ValueError:
-        display = 9
-    bot = _Bot(name=name, prefix=dest, display=display)
-    manager = _Manager()
-    try:
-        manager.start_game(bot)
-        print(f"Applying standard in-game settings on :{display}...")
-        _wait_for_game(bot)
-        _run_settings_apply(display)
-    finally:
-        manager.stop_game(bot)
-
-
-def _Bot(name: str, prefix: str, display: int):
-    from gt_spector.bot_manager import Bot
-    return Bot(name=name, prefix=prefix, display=display, shm_id=display)
-
-
-def _Manager():
-    from gt_spector.bot_manager import BotManager
-    return BotManager()
-
-
-def _wait_for_game(bot, timeout: float = 180.0) -> None:
-    """Poll the game's frame until it produces non-blank content."""
-    from gt_spector.session import Session
-    s = Session(f":{bot.display}", source=f"shm://{bot.display}")
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        try:
-            s.refresh()
-            if float(s.frame.std()) > 2.0:
-                return
-        except (OSError, ValueError, AttributeError):
-            pass
-        time.sleep(5)
-    print(f"WARNING: game on :{bot.display} not ready after {timeout}s", file=sys.stderr)
-
-
-def _run_settings_apply(display: int) -> None:
-    """Drive the in-game settings to the standard config."""
-    from gt_spector.__main__ import apply_in_game_settings
-    from gt_spector.game_world import GameWorld
-    from gt_spector.locator import Locator
-    from gt_spector.navigator import Navigator
-    from gt_spector.session import Session
-
-    s = Session(f":{display}", source=f"shm://{display}")
-    gw = GameWorld()
-    locator = Locator()
-    gw.set_locator(locator)
-    navigator = Navigator(gw, locator, s)
-    rc = apply_in_game_settings(s, _STANDARD_SETTINGS, gw, navigator)
-    if rc != 0:
-        print("WARNING: could not apply standard in-game settings", file=sys.stderr)
+    src = os.path.join(MASTER_APPDATA, "Doomsday_ Last Survivors")
+    if not os.path.exists(src):
+        print(f"WARNING: master appdata not found at {src}, starting fresh")
+        return
+    appdata = os.path.join(
+        dest, "drive_c", "users", "steamuser",
+        "AppData", "LocalLow", "IGG", "Doomsday_ Last Survivors",
+    )
+    os.makedirs(appdata, exist_ok=True)
+    r = subprocess.run(["cp", "-a", "--reflink=always", src + "/.", appdata + "/"],
+                       capture_output=True, check=False)
+    if r.returncode != 0:
+        shutil.copytree(src, appdata, dirs_exist_ok=True)
+    reg_src = os.path.join(MASTER_APPDATA, "user.reg")
+    if os.path.exists(reg_src):
+        shutil.copy2(reg_src, os.path.join(dest, "user.reg"))
+        print("Copied master appdata (asset cache + tutorial-complete registry)")
 
 
 def _install_fonts(dest: str) -> None:
