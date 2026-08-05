@@ -156,7 +156,7 @@ class _TickGW:
 
 
 def test_help_bot_tick_dismisses_stuck_popup(monkeypatch):
-    """Neither-gold-nor-dim pixel -> ESC, then re-navigate to the dialog."""
+    """Neither-gold-nor-dim pixel -> re-navigate to the dialog."""
     b = HelpBot()
     b._session = _TickSession(pixel=(78, 57, 17))
     b._gw = _TickGW()
@@ -165,26 +165,22 @@ def test_help_bot_tick_dismisses_stuck_popup(monkeypatch):
     monkeypatch.setattr(b, "_navigate_to_help_dialog",
                         lambda: recovered.append(True) or setattr(b, "_status", "recovered"))
     b._tick()
-    assert "Escape" in b._session.keys
     assert recovered == [True]
     assert b._status == "recovered"
 
 
 def test_help_bot_tick_dismisses_reaping_screen(monkeypatch):
-    """resource-reaping screen-saver popup detected -> ESC + re-navigate."""
+    """resource-reaping screen-saver popup detected -> exit_popups + re-navigate."""
     b = HelpBot()
-    b._session = _TickSession(pixel=(71, 72, 71))
+    b._session = _TickSession(screen="resouce_reaping", pixel=(71, 72, 71))
     b._gw = _TickGW()
-    b._locator = type("L", (), {
-        "find": lambda self, frame, name: type("R", (), {
-            "found": name == "resouce_reaping_detect_static", "score": 1.0})()})()
     b._loop = type("L", (), {"run": lambda self, s: "idle", "help_clicks": 0})()
-    recovered = []
+    exited = []
+    monkeypatch.setattr(b, "_exit_popups", lambda screen: exited.append(True) or True)
     monkeypatch.setattr(b, "_navigate_to_help_dialog",
-                        lambda: recovered.append(True) or setattr(b, "_status", "recovered"))
+                        lambda: setattr(b, "_status", "re-navigated"))
     b._tick()
-    assert "Escape" in b._session.keys
-    assert recovered == [True]
+    assert exited == [True]
 
 
 def test_help_bot_tick_clicks_gold_and_updates_status(monkeypatch):
@@ -197,3 +193,25 @@ def test_help_bot_tick_clicks_gold_and_updates_status(monkeypatch):
     b._loop = loop
     b._tick()
     assert b._status == "clicked_3"
+
+
+def test_help_bot_tick_exits_popup_and_navigates(monkeypatch):
+    from gt_spector.scripts.help_bot import HelpBot
+
+    b = HelpBot()
+    b._session = _TickSession(screen="road_to_conquest_menu", pixel=(71, 72, 71))
+    b._gw = _TickGW()
+    b._loop = type("L", (), {"run": lambda self, s: "idle", "help_clicks": 0})()
+    exited = []
+
+    def fake_exit_popups(screen):
+        exited.append(True)
+        b._navigate_to_help_dialog()
+        return True
+
+    monkeypatch.setattr(b, "_exit_popups", fake_exit_popups)
+    monkeypatch.setattr(b, "_navigate_to_help_dialog",
+                        lambda: setattr(b, "_status", "re-navigated"))
+    b._tick()
+    assert exited == [True]
+    assert b._status == "re-navigated"

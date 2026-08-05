@@ -94,10 +94,9 @@ class HelpBot:
 
     def _tick(self) -> None:
         self._session.refresh()
-        if self._reaping_popup_up():
-            self._dismiss_popup()
-            return
         screen = self._gw.identify(self._session)
+        if self._exit_popups(screen):
+            return
         if screen != "help_dialog":
             # Not in the dialog: navigate to it (re-opens after it closes).
             self._navigate_to_help_dialog()
@@ -105,29 +104,21 @@ class HelpBot:
         result = self._loop.run(self._session)
         if result == "clicked":
             self._status = f"clicked_{self._loop.help_clicks}"
-            # Dialog may close after a click; re-navigate next tick.
         elif result == "stuck":
-            # Help button pixel is neither gold nor dim: a popup is covering
-            # it. Dismiss with ESC and re-navigate.
-            self._dismiss_popup()
+            self._status = "stuck, re-navigating"
+            self._navigate_to_help_dialog()
         else:
             self._status = result or "idle"
 
-    def _reaping_popup_up(self) -> bool:
-        """True when the resource-reaping screen-saver popup is visible.
+    def _exit_popups(self, screen: str | None) -> bool:
+        """Dismiss a popup/screen-saver if one is up. True if it acted."""
+        from gt_spector.popups import exit_popups
 
-        It can appear over any screen; any click or ESC dismisses it.
-        """
-        try:
-            r = self._locator.find(self._session.frame, "resouce_reaping_detect_static")
-            return bool(r.found)
-        except Exception:  # noqa: BLE001
-            return False
-
-    def _dismiss_popup(self) -> None:
-        self._session.key_press("Escape")
-        self._status = "dismissed_popup, re-navigating"
-        self._navigate_to_help_dialog()
+        if exit_popups(self._session, self._locator, screen):
+            self._status = f"dismissed {screen}, re-navigating"
+            self._navigate_to_help_dialog()
+            return True
+        return False
 
     def _navigate_to_help_dialog(self) -> None:
         from gt_spector.scripts.help_nav import navigate_to_help_dialog
