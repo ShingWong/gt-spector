@@ -20,9 +20,12 @@ python -m gt_spector start bot07     # power on bot07
 python -m gt_spector start all       # power on every discovered bot
 python -m gt_spector stop bot07      # power off bot07
 python -m gt_spector stop all        # power off all bots
+python -m gt_spector restart bot07   # stop then start bot07
+python -m gt_spector restart all     # stop then start all bots
 ```
 
-`start_all` and `stop_all` are accepted as single-token aliases for `all`.
+`start_all`, `stop_all`, and `restart_all` are accepted as single-token
+aliases for `all`.
 
 ## Flow
 
@@ -33,14 +36,16 @@ python -m gt_spector stop all        # power off all bots
    (`RUNNING` / `STARTING` / `OFFLINE`).
 3. `stop <name>`: `manager.stop_game(bot)` (kills every Doomsday.exe on the
    bot's display), then print `OFFLINE`.
-4. `all`: loop over `manager.bots`, acting on each and reporting it
+4. `restart <name>`: `manager.restart_game(bot)` (stop then start), then a
+   short fixed wait and report the state (same as `start`).
+5. `all`: loop over `manager.bots`, acting on each and reporting it
    individually. Non-zero exit if any bot failed.
 
 ## Architecture
 
 - New `run_power_command(manager, action, target) -> int` in
-  `gt_spector/power.py` (new module). `action` is `start` | `stop`,
-  `target` is `all` | a bot name. Returns process exit code.
+  `gt_spector/power.py` (new module). `action` is `start` | `stop` |
+  `restart`, `target` is `all` | a bot name. Returns process exit code.
 - `__main__.py` dispatches subcommands before the existing `--cli` /
   `--bot-console` / `--in-game-settings` flags. Unknown bot → error + exit 1.
 - Errors from `start_game` / `stop_game` (`RuntimeError`, `OSError`) are
@@ -61,6 +66,5 @@ reports the bot's state via `_refresh_state`. No long polling.
 
 ## Out of Scope
 
-- `restart` subcommand (console has it; can be added later if needed).
 - A `status` subcommand (verify-and-report is built into start/stop).
 - Changes to `BotManager` itself.
