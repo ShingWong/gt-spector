@@ -56,6 +56,24 @@ def test_login_screen_templates_exist_in_store():
     assert names <= available
 
 
+def test_hero_details_screen_config():
+    from gt_spector.game_world import GameWorld
+    gw = GameWorld()
+    spec = gw.screens["hero_details"]
+    assert spec["templates"] == ["hero_details_detect_static"]
+    assert spec.get("advance") == "esc"
+    # ESC from hero_details returns to shelter (not world map).
+    assert gw.navigation["hero_details"]["shelter"] == {"action": "esc"}
+
+
+def test_hero_details_template_in_store():
+    from gt_spector import templates as _t
+    available = {t.name for t in _t.load_templates()}
+    assert "hero_details_detect_static" in available
+    t = next(x for x in _t.load_templates() if x.name == "hero_details_detect_static")
+    assert t.fixed is True
+
+
 def test_identify_self_initializes_locator(monkeypatch):
     from gt_spector import locator as locator_mod
     from gt_spector.game_world import GameWorld

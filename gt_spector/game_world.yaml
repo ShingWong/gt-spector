@@ -257,6 +257,13 @@ screens:
   avatar_menu:
     description: avatar / commander info menu. Identified by back + commander_static.
     templates: [back_static, commander_static]
+  hero_details:
+    description: hero milestone detail screen that pops up on login after a
+      hero reaches a milestone. Rare (tutorial-driven). ESC exits back to the
+      previous screen (shelter) in all cases — it may pass through the
+      exit_dialog, which routes to shelter via exit_cancel.
+    templates: [hero_details_detect_static]
+    advance: esc
   settings:
     description: settings menu. Account option at 218,510 (login/account switching).
     templates: [settings_title_static]
@@ -388,6 +395,8 @@ navigation:
     help_dialog:        {action: locate, name: help_title_static}
   help_dialog:
     alliance_menu:      {action: locate, name: help_dialog_exit_static}
+  hero_details:
+    shelter:            {action: esc}
   upgrade_ranged_barracks:
     shelter_view:       {action: locate, name: upgrade_barracks_exit_static}
   exit_dialog:

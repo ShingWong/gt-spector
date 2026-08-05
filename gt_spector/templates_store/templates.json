@@ -898,5 +898,17 @@
     "score_threshold": 0.75,
     "reader": "vlm",
     "fixed": true
+  },
+  {
+    "name": "hero_details_detect_static",
+    "shape": "rect",
+    "x": 839,
+    "y": 687,
+    "w": 46,
+    "h": 22,
+    "game_version": "Doomsday_1.59.0",
+    "score_threshold": 0.75,
+    "reader": "vlm",
+    "fixed": true
   }
 ]
