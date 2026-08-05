@@ -50,15 +50,26 @@ screen click at `(x+3, y+29)`.
 
 **Typing** must use the one-shot `sendtext.exe` Wine helper (Windows SendInput
 with `KEYEVENTF_UNICODE`), because X11/xdotool typing drops `@`/uppercase.
-Command form:
+
+**Verified input sequence (bot06, 2026-08-04):**
+- Browser clicks go through **xdotool** (`session.click`), not the Wine helper.
+  The embedded browser only registers xdotool clicks on its input fields.
+- Field **text** is then sent **text-only** via the one-shot helper — no
+  coordinates. A Wine-helper click (or the `sendtextd` daemon's
+  `SetForegroundWindow` on every command) steals focus from the field the
+  xdotool click just focused, so the text never lands.
 
 ```
-WINEPREFIX=<bot-prefix> wine .../sendtext.exe "{CtrlA}<text>" <x> <y>
+WINEPREFIX=<bot-prefix> wine .../sendtext.exe "{CtrlA}<text>"
 ```
 
-- The one-shot helper does `SetForegroundWindow` → `click_at(x,y)` → `{CtrlA}` → type.
-- The persistent `sendtextd` daemon is **not** reliable for the click+type
-  combo; use the one-shot binary.
+- `typing.type_text(prefix, display, text)` wraps the text-only form.
+- `typing.type_at(prefix, display, text, x, y)` (click+type) still exists but
+  is **not** used for the browser form; the browser ignores its click.
+- Expect long delays (multiple seconds) between the click and the text
+  appearing — the embedded browser responds slowly to input.
+- The persistent `sendtextd` daemon is **not** reliable for the browser form;
+  use the one-shot binary.
 
 **Screens that share the `igg_login_exit_static` template** (the browser X):
 - `igg_login` (email/password form)

@@ -124,5 +124,13 @@ pass it as the second argument.
 
 Relies on deterministic template identification (no VLM) and the
 sendtext.exe Wine helper for reliable typing of '@' and uppercase.
+
+Input sequence (verified live): clicks on the browser form go through xdotool
+(`session.click` — the embedded browser only registers xdotool clicks), then
+the field text is sent text-only via `sendtext.exe` (`typing.type_text`, no
+coords — a click from the Wine helper would steal focus from the field that
+the xdotool click just focused). Long delays are expected between click and
+text because the browser responds slowly to input.
+
 Account passwords are in /home/swong/dls/src/ahk/accounts
 (email:password per line).
