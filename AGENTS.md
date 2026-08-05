@@ -66,6 +66,11 @@ For one-shot initialization of game options (or after Wine-prefix rebuilds):
 To switch a bot's IGG account:
 `change_account <email> [password]` in the CLI (see docs/cli.md "Change Account").
 
+To power bots on/off without the GUI console (agentic use):
+`python -m gt_spector start bot07`, `stop bot07`, `restart bot07`,
+or `start all` / `stop all` / `restart all` (aliases `start_all` etc.)
+(see `docs/cli.md` "Bot Power").
+
 ## Code Style
 
 - Python: ruff + mypy strict
