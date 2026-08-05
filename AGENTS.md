@@ -46,30 +46,62 @@ python -m gt_spector --session :9
 python -m gt_spector --session :9 --cli
 ```
 
-## CLI navigation
+## Agentic Workflow — always build with subagents
 
-Drive bots screen-to-screen from the interactive CLI (see `docs/cli.md`):
+**Any multi-step implementation MUST be built with subagents first.** Load
+`subagent-driven-development` and dispatch a fresh implementer subagent per
+plan task, with a task review after each and a whole-branch review at the
+end. Do not implement multi-task plans inline in a single session.
+
+The required chain for feature work:
+
+1. `brainstorming` — explore intent, produce a design, get approval.
+2. `writing-plans` — turn the approved design into a task-by-task plan.
+3. `subagent-driven-development` — execute the plan by dispatching a fresh
+   subagent per task, reviewing each, then the whole branch.
+4. `finishing-a-development-branch` — integrate the finished work.
+
+## CLI Reference (agentic use)
+
+Full detail in `docs/cli.md`. All commands below are the agent-facing entry
+points.
+
+### Power: start/stop/restart bots (no GUI needed)
+
+```bash
+python -m gt_spector start bot07      # or: start all / start_all
+python -m gt_spector stop bot07       # or: stop all / stop_all
+python -m gt_spector restart bot07    # or: restart all / restart_all
+```
+
+`start`/`restart` wait a few seconds after launching, then report each bot's
+state (Running/Starting/Offline). `stop` reports Offline once killed.
+Unknown bot names or launch failures exit non-zero.
+
+### Interactive CLI (screen navigation + login)
 
 ```bash
 python -m gt_spector --session :<display> --cli
 ```
 
-Core commands: `where`, `go <screen> [-v]`, `route <screen>`,
-`locate <template>`, `label <screen>`, `screens`, `loc <screen> <name>`.
-`-v` on `go` prints each hop as it moves. Navigation is template-based
-(no VLM).
+- Screen navigation: `where`, `go <screen> [-v]`, `route <screen>`,
+  `locate <template>`, `label <screen>`, `screens`, `loc <screen> <name>`.
+  `-v` on `go` prints each hop. Template-based (no VLM).
+- Switch a bot's IGG account: `change_account <email> [password]`.
+- Complete a login after an expired session:
+  `expired_login <email> [password]`.
+- Both login commands pause for `y/N` confirmation at each step; pass the
+  password as the second argument to skip the prompt.
 
-For one-shot initialization of game options (or after Wine-prefix rebuilds):
-`python -m gt_spector --session :<display> --in-game-settings "graphics-quality=low"`
-(see `docs/cli.md` "In-Game Settings").
+### One-shot initialization
 
-To switch a bot's IGG account:
-`change_account <email> [password]` in the CLI (see docs/cli.md "Change Account").
+```bash
+python -m gt_spector --session :<display> --in-game-settings "graphics-quality=low"
+```
 
-To power bots on/off without the GUI console (agentic use):
-`python -m gt_spector start bot07`, `stop bot07`, `restart bot07`,
-or `start all` / `stop all` / `restart all` (aliases `start_all` etc.)
-(see `docs/cli.md` "Bot Power").
+Multiple settings comma-separated:
+`"graphics-quality=low,frame-rate=low,sound-effects=off,background-music=off"`.
+Deterministic pixel detection (no VLM).
 
 ## Code Style
 

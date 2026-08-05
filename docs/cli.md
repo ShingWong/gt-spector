@@ -134,3 +134,34 @@ text because the browser responds slowly to input.
 
 Account passwords are in /home/swong/dls/src/ahk/accounts
 (email:password per line).
+
+## Expired Login
+
+Complete a login after a bot's session expired (e.g. a fresh provision or an
+expired session) — same browser login flow as Change Account, but starting
+from the expired-session dialog.
+
+  python -m gt_spector --session :<display> --cli
+  > expired_login sr02-09@mx1.us
+
+Pauses for `y/N` confirmation at each step; pass the password as the second
+argument to skip the prompt.
+
+## Bot Power
+
+Start, stop, or restart bots (individual or all) from the command line for
+agentic/scripted use. Reuses the same BotManager the console's Start/Stop
+buttons use.
+
+  python -m gt_spector start bot07
+  python -m gt_spector start all
+  python -m gt_spector stop bot07
+  python -m gt_spector stop all
+  python -m gt_spector restart bot07
+  python -m gt_spector restart all
+
+`start_all`, `stop_all`, and `restart_all` are aliases for the `all` forms.
+
+`start`/`restart` wait a few seconds after launching, then report the bot's
+state (Running/Starting/Offline). `stop` reports Offline once killed.
+Unknown bot names or launch failures exit non-zero.
