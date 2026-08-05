@@ -92,3 +92,24 @@ def test_identify_self_initializes_locator(monkeypatch):
     gw.identify(session)
     # identify lazily created a locator instead of skipping template screens
     assert len(created) == 1
+
+
+def test_road_to_conquest_screen_registered():
+    from gt_spector.game_world import GameWorld
+    gw = GameWorld()
+    spec = gw.screens["road_to_conquest_menu"]
+    assert spec["templates"] == ["popup_road_to_conquest_detect_static"]
+
+
+def test_resouce_reaping_screen_registered():
+    from gt_spector.game_world import GameWorld
+    gw = GameWorld()
+    spec = gw.screens["resouce_reaping"]
+    assert spec["templates"] == ["resouce_reaping_detect_static"]
+
+
+def test_popup_templates_fixed():
+    from gt_spector import templates as _t
+    by_name = {t.name: t for t in _t.load_templates()}
+    assert by_name["popup_road_to_conquest_detect_static"].fixed is True
+    assert by_name["common_back_button_detect_static"].fixed is True

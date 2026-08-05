@@ -286,6 +286,16 @@ screens:
       the login module.'
     templates: [another_login_disconnect_detect_static]
     advance: esc
+  road_to_conquest_menu:
+    description: '"Road to Conquest" menu popup. Does NOT dismiss with ESC
+      or a click-anywhere; must click the common back button
+      (common_back_button_detect_static) to return to the previous screen.'
+    templates: [popup_road_to_conquest_detect_static]
+  resouce_reaping:
+    description: '"Resource Reaping" screen-saver popup that appears over any
+      screen during inactivity. Dismiss with a single ESC (or any click).'
+    templates: [resouce_reaping_detect_static]
+    advance: esc
   start_norah:
     description: startup Norah story screen. Only navigation is ESC to the
       next screen (an event screen or the shelter view). The next screen is

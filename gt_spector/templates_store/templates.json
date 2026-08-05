@@ -910,5 +910,41 @@
     "score_threshold": 0.75,
     "reader": "vlm",
     "fixed": true
+  },
+  {
+    "name": "popup_road_to_conquest_detect_static",
+    "shape": "rect",
+    "x": 88,
+    "y": 20,
+    "w": 65,
+    "h": 19,
+    "game_version": "Doomsday_1.59.0",
+    "score_threshold": 0.75,
+    "reader": "vlm",
+    "fixed": true
+  },
+  {
+    "name": "upper_left_exit_detect_static",
+    "shape": "rect",
+    "x": 23,
+    "y": 20,
+    "w": 30,
+    "h": 29,
+    "game_version": "Doomsday_1.59.0",
+    "score_threshold": 0.75,
+    "reader": "vlm",
+    "fixed": false
+  },
+  {
+    "name": "common_back_button_detect_static",
+    "shape": "rect",
+    "x": 22,
+    "y": 21,
+    "w": 33,
+    "h": 31,
+    "game_version": "Doomsday_1.59.0",
+    "score_threshold": 0.75,
+    "reader": "vlm",
+    "fixed": true
   }
 ]
