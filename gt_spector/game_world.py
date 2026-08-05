@@ -78,6 +78,12 @@ class GameWorld:
                 continue
             if self._matches(session, fp):
                 return name
+        # Last resort: an unknown screen that still has the shared back
+        # button UI element. The caller can exit it via exit_popups.
+        if self._locator is not None:
+            r = self._locator.find(session.frame, "common_back_button_detect_static")
+            if r.found:
+                return "unknown_screen_with_back_button"
         return None
 
     def _ensure_locator(self) -> None:

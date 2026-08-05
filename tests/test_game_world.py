@@ -113,3 +113,39 @@ def test_popup_templates_fixed():
     by_name = {t.name: t for t in _t.load_templates()}
     assert by_name["popup_road_to_conquest_detect_static"].fixed is True
     assert by_name["common_back_button_detect_static"].fixed is True
+
+
+def test_identify_returns_unknown_with_back_button_as_last_resort(monkeypatch):
+    from gt_spector.game_world import GameWorld
+
+    class _Locate:
+        def __init__(self, found):
+            self.found = found
+
+    class _Locator:
+        def find(self, frame, name):
+            if name == "common_back_button_detect_static":
+                return _Locate(True)
+            return _Locate(False)
+
+    gw = GameWorld()
+    gw.set_locator(_Locator())
+    session = type("S", (), {"frame": object()})()
+    assert gw.identify(session) == "unknown_screen_with_back_button"
+
+
+def test_identify_returns_none_when_no_back_button(monkeypatch):
+    from gt_spector.game_world import GameWorld
+
+    class _Locate:
+        def __init__(self, found):
+            self.found = found
+
+    class _Locator:
+        def find(self, frame, name):
+            return _Locate(False)
+
+    gw = GameWorld()
+    gw.set_locator(_Locator())
+    session = type("S", (), {"frame": object()})()
+    assert gw.identify(session) is None
