@@ -29,24 +29,34 @@ change-account <email> [password]
 If the bot is already logged into the requested email, the command reports
 that and does nothing.
 
-## Flow (verified live on bot04, 2026-08-04)
+## Flow (verified live on bot06, 2026-08-04; re-verified on bot07, 2026-08-05)
 
 All coordinates below are **game-window-relative**. The window is offset by
 **(+3, +29)** on the screen; to click a window-relative `(x, y)`, send a
 screen click at `(x+3, y+29)`.
 
-| Step | Action | Window coord | Identify via |
+**Field positions are NOT fixed — they are derived from the password-reveal
+eye icon** (see below), because the login page render shifts between bots and
+renders. The table below is a single render's reference only:
+
+| Step | Action | Window coord (one render) | Identify via |
 |------|--------|--------------|--------------|
 | 1 | Navigate current screen → `account` | (Navigator) | `account_title_static` |
 | 2 | Click CHANGE ACCOUNT button | (573, 660) | `igg_id_static` (state 2) |
 | 3 | Click IGG Account icon | (735, 262) | browser spawns, `igg_login_exit_static` |
-| 4 | Click email field, `{CtrlA}`, type email | (365, 156) | — |
+| 4 | Click email field, `{CtrlA}`, type email | (365, 126) | — |
 | 5 | Click password field, `{CtrlA}`, type password | (365, 226) | — |
-| 6 | Click eye to reveal password, confirm, click eye to hide | (885, 195) | — |
-| 7 | Click LOGIN | (462, 258) | success page `login_ok_currently_static` |
+| 6 | Click eye to reveal password, confirm, click eye to hide | (880, 226) | — |
+| 7 | Click LOGIN | (365, 296) | success page `login_ok_currently_static` |
 | 8 | Click Continue | (500, 300) | `select_igg_id` (`login_select_igg_id_static`) |
 | 9 | Click the IGG ID row | (350, 165) | ID-confirm dialog (also `igg_login_exit_static`) |
 | 10 | Click OK | (700, 560) | game loads; identify shelter/events |
+
+**Eye-derived positions (the actual mechanism):** `login()` locates the
+password-reveal eye icon (`igg_login_eye2_static`, falling back to
+`login_eye_static`) and derives: email 100px above (`EMAIL_Y_ABOVE_EYE=100`),
+password aligned with the eye, login 70px below (`LOGIN_Y_BELOW_EYE=70`), all
+at x=365. This is what makes login work across varying page renders.
 
 **Typing** must use the one-shot `sendtext.exe` Wine helper (Windows SendInput
 with `KEYEVENTF_UNICODE`), because X11/xdotool typing drops `@`/uppercase.
