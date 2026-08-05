@@ -103,6 +103,29 @@ Multiple settings comma-separated:
 `"graphics-quality=low,frame-rate=low,sound-effects=off,background-music=off"`.
 Deterministic pixel detection (no VLM).
 
+### Popup & screen-saver handling
+
+Bots can be interrupted by popup screens. `gt_spector/popups.py` provides the
+single entry point `exit_popups(session, locator, screen) -> bool` and is
+called automatically by navigation (`help_nav`) and the help loop
+(`HelpBot._tick`), including when the help-button pixel is stuck (neither gold
+nor dim).
+
+Popup types and their exit:
+- Screen saver (dismiss with ESC): `resouce_reaping`, `another_login_disconnect`.
+- Back button (click `common_back_button_detect_static`): `road_to_conquest_menu`,
+  `unknown_screen_with_back_button`.
+
+`unknown_screen_with_back_button` is what `identify()` returns as a LAST
+resort when no known screen matches but the shared back button is present.
+
+To add a NEW popup type:
+1. If it's a real identifiable screen, add it to `game_world.yaml` with its
+   template (so `identify()` returns its name).
+2. Add its name to `SCREENSAVER_SCREENS` (ESC exit) or `BACK_BUTTON_SCREENS`
+   (back-button exit) in `gt_spector/popups.py`.
+3. It is now handled everywhere automatically — no other call sites.
+
 ## Code Style
 
 - Python: ruff + mypy strict

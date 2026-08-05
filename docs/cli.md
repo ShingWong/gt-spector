@@ -137,6 +137,9 @@ is located (polled until it renders — the browser's X button appears before
 the eye), then email is 100px above, password aligned, login 70px below, all
 at x=365. This adapts to page-render shifts between bots.
 
+Navigation and the help loop automatically dismiss popups and screen-saver
+screens via `exit_popups` (see AGENTS.md "Popup & screen-saver handling").
+
 Account passwords are in /home/swong/dls/src/ahk/accounts
 (email:password per line).
 
