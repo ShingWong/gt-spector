@@ -215,3 +215,37 @@ def test_help_bot_tick_exits_popup_and_navigates(monkeypatch):
     b._tick()
     assert exited == [True]
     assert b._status == "re-navigated"
+
+
+def test_navigate_to_help_dialog_exits_popup(monkeypatch):
+    calls = {}
+
+    class FakeSession:
+        def refresh(self):
+            calls["refresh"] = True
+
+        def get_pixel(self, x, y):
+            return (47, 44, 44)
+
+        def click(self, x, y):
+            calls["click"] = (x, y)
+
+    class FakeGW:
+        def identify(self, session):
+            return "road_to_conquest_menu"
+
+    class FakeNavigator:
+        def __init__(self, gw, locator, session):
+            calls["ctor"] = True
+
+        def goto(self, target):
+            return target
+
+    monkeypatch.setattr("gt_spector.scripts.help_nav.Navigator", FakeNavigator)
+    monkeypatch.setattr(
+        "gt_spector.scripts.help_nav.exit_popups",
+        lambda session, locator, screen: calls.setdefault("exit", []).append(screen) or True,
+    )
+    monkeypatch.setattr("gt_spector.scripts.help_nav.time.sleep", lambda s: None)
+    navigate_to_help_dialog(FakeGW(), object(), FakeSession())
+    assert calls["exit"] == ["road_to_conquest_menu"]

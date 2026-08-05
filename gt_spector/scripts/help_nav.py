@@ -10,6 +10,7 @@ from __future__ import annotations
 import time
 
 from gt_spector.navigator import Navigator
+from gt_spector.popups import exit_popups
 
 # The help trigger on the alliance menu (red when a request is active).
 TRIGGER_X = 1097
@@ -26,6 +27,10 @@ def navigate_to_help_dialog(gw, locator, session) -> str:
     nav = Navigator(gw, locator, session)
     session.refresh()
     screen = gw.identify(session)
+    if exit_popups(session, locator, screen):
+        time.sleep(0.5)
+        session.refresh()
+        screen = gw.identify(session)
     if screen == "help_dialog":
         return "help_dialog"
     if screen is None:
