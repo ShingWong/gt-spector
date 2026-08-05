@@ -779,11 +779,19 @@ class BotConsole:
         """
         import threading
 
+        from gt_spector.game_world import GameWorld
+        from gt_spector.locator import Locator
+
         def worker() -> None:
+            # Own GameWorld/Locator: the UI thread shares self._gw/_locator
+            # (whose mutable _gray_cache would race if accessed concurrently).
+            gw = GameWorld()
+            locator = Locator()
+            gw.set_locator(locator)
             while not self._vlm_stop:
                 time.sleep(MONITOR_INTERVAL)
                 try:
-                    self._monitor_tick()
+                    self._monitor_tick(gw, locator)
                 except Exception as e:  # noqa: BLE001 - never kill the worker
                     logs.log_system(f"monitor worker error: {e}")
 
@@ -821,14 +829,14 @@ class BotConsole:
                 self._vlm_screens[bot.name] = vlm_loc
                 logs.log_bot(bot.name, f"VLM screen = {vlm_loc}")
 
-    def _monitor_tick(self) -> None:
+    def _monitor_tick(self, gw: Any = None, locator: Any = None) -> None:
         for bot in self._manager.bots:
             try:
-                self._monitor_one(bot)
+                self._monitor_one(bot, gw, locator)
             except Exception:  # noqa: BLE001 - one bot must not kill the poll
                 logs.log_bot(bot.name, "monitor error, continuing")
 
-    def _monitor_one(self, bot: Bot) -> None:
+    def _monitor_one(self, bot: Bot, gw: Any = None, locator: Any = None) -> None:
         if bot.state != BotState.RUNNING or not bot.pid:
             return
         now = time.monotonic()
@@ -852,7 +860,14 @@ class BotConsole:
                 return
             expected = getattr(runner.script, "expected_screen", None)
             if expected:
-                loc = self._detect_location(bot, self._frames.get(bot.name))
+                if gw is None:
+                    from gt_spector.game_world import GameWorld
+                    from gt_spector.locator import Locator
+                    gw = GameWorld()
+                    locator = Locator()
+                    gw.set_locator(locator)
+                loc = self._detect_location(
+                    bot, self._frames.get(bot.name), gw=gw, locator=locator)
                 if self._needs_recovery(loc, expected):
                     if self._monitor.recoveries_left(bot):
                         logs.log_bot(bot.name, f"wrong screen {loc}, recovering")

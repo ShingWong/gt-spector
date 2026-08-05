@@ -181,7 +181,7 @@ def test_monitor_tick_recover_when_attempts_left(tmp_path, monkeypatch):
             calls["succeeded"] = True
 
     c._monitor = FakeMonitor()
-    c._detect_location = lambda bot, frame: "LOBBY"
+    c._detect_location = lambda bot, frame, gw=None, locator=None: "LOBBY"
     c._monitor_tick()
     run_closure, recovered_script = calls["recover"]
     assert recovered_script is script
@@ -218,7 +218,7 @@ def test_monitor_tick_marks_error_when_recovery_exhausted(tmp_path, monkeypatch)
             calls["marked"] = (bot, runner)
 
     c._monitor = FakeMonitor()
-    c._detect_location = lambda bot, frame: "LOBBY"
+    c._detect_location = lambda bot, frame, gw=None, locator=None: "LOBBY"
     c._monitor_tick()
     assert calls["marked"] == (bot, runner)
     assert bot.state == BotState.ERROR
@@ -252,7 +252,7 @@ def test_monitor_tick_recovery_succeeded_on_expected_screen(tmp_path, monkeypatc
             calls["succeeded"] = True
 
     c._monitor = FakeMonitor()
-    c._detect_location = lambda bot, frame: "ALLIANCE"
+    c._detect_location = lambda bot, frame, gw=None, locator=None: "ALLIANCE"
     c._monitor_tick()
     assert calls["succeeded"] is True
     assert bot.state == BotState.RUNNING
@@ -720,7 +720,7 @@ def test_monitor_tick_skips_recovery_for_self_healing_runner(tmp_path, monkeypat
             calls["recover"] = True
 
     c._monitor = FakeMonitor()
-    c._detect_location = lambda bot, frame: "LOBBY"
+    c._detect_location = lambda bot, frame, gw=None, locator=None: "LOBBY"
     c._monitor_tick()
     assert "recover" not in calls
 
@@ -753,7 +753,7 @@ def test_monitor_tick_recovers_from_runner_exception(tmp_path, monkeypatch):
             raise RuntimeError("boom")
 
     c._monitor = FakeMonitor()
-    c._detect_location = lambda bot, frame: "LOBBY"
+    c._detect_location = lambda bot, frame, gw=None, locator=None: "LOBBY"
     # Must not raise: the poll loop survives a per-bot recovery failure.
     c._monitor_tick()
     assert bot.state == BotState.RUNNING
@@ -941,3 +941,34 @@ def test_poll_does_not_run_monitor_tick(monkeypatch):
     c._monitor_tick = lambda: calls.append("tick")
     c._poll()
     assert calls == ["rows"]  # tick must NOT be called from the UI poll
+
+
+def test_monitor_one_uses_worker_locator_for_detect(monkeypatch):
+    from gt_spector import logs
+
+    monkeypatch.setattr(logs, "LOGS_DIR", "/tmp/gtsp")
+    c = make_console()
+    bot = make_bot()
+    bot.pid = 111
+    c._manager = type("M", (), {"bots": [bot]})()
+    script = type("S", (), {"expected_screen": "ALLIANCE"})()
+    runner = type("R", (), {"script": script})()
+    c._runners = {"bot01": runner}
+    c._frames = {"bot01": None}
+    seen = {}
+
+    class FakeMonitor:
+        def note_running(self, bot, now):
+            pass
+
+        def check_responsiveness(self, bot, now):
+            return True
+
+        def recovery_succeeded(self, bot):
+            pass
+
+    c._monitor = FakeMonitor()
+    c._detect_location = lambda bot, frame, gw=None, locator=None: (
+        seen.update({"gw": gw, "locator": locator}) or None)
+    c._monitor_one(bot)
+    assert seen["gw"] is not None and seen["locator"] is not None
