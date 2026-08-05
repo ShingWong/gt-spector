@@ -963,6 +963,35 @@ def test_provision_n_handles_subprocess_error(tmp_path, monkeypatch):
     assert statuses[-1] == "bot01: FAILED (python3 not found)"
 
 
+def test_provision_n_reports_start_login_exception(tmp_path, monkeypatch):
+    """An exception in start_game/_boot_and_login must be reported via the
+    status bar, not die silently in the worker thread."""
+    _sync_threads(monkeypatch)
+    c = make_console()
+    statuses = []
+
+    def fake_run(cmd, **kw):
+        return type("R", (), {"returncode": 0, "stderr": "", "stdout": ""})()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    c._status = type("S", (), {"config": lambda s, text: statuses.append(text)})()
+    c._refresh_bots = lambda: None
+    c._tk = _tk_stub()
+    c._unprovisioned_accounts = lambda: [("bot01", "a@x")]
+    c._login_password = lambda email: "pw"
+
+    def boom(bot, email, password):
+        raise RuntimeError("Xvfb launch failed")
+
+    c._boot_and_login = boom
+    c._manager = type("M", (), {
+        "get": lambda self, n: type("B", (), {"name": n})(),
+        "start_game": lambda self, b: None,
+    })()
+    c._provision_n(1)  # must not raise: the exception is caught and reported
+    assert statuses[-1] == "bot01: FAILED (Xvfb launch failed)"
+
+
 def test_detect_location_accepts_explicit_gw_and_locator():
     c = make_console()
     calls = {}

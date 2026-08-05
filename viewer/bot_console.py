@@ -234,9 +234,13 @@ class BotConsole:
                 if bot is None:
                     _set_status(f"{name}: FAILED (no bot)")
                     return
-                self._manager.start_game(bot)
-                password = self._login_password(email)
-                result = self._boot_and_login(bot, email, password)
+                try:
+                    self._manager.start_game(bot)
+                    password = self._login_password(email)
+                    result = self._boot_and_login(bot, email, password)
+                except Exception as e:  # noqa: BLE001 - report, don't die silently
+                    _set_status(f"{name}: FAILED ({e})")
+                    return
                 if result in ("in_game", "shelter_view", "world_map",
                               "start_norah", "glory_league_event", None):
                     _set_status(f"{name}: logged in")
