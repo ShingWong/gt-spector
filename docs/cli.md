@@ -173,3 +173,27 @@ buttons use.
 `start`/`restart` wait a few seconds after launching, then report the bot's
 state (Running/Starting/Offline). `stop` reports Offline once killed.
 Unknown bot names or launch failures exit non-zero.
+
+## Bot lifecycle (provision → login → helpbot)
+
+Verified end-to-end on bot08 (2026-08-05):
+
+```bash
+# 1. Add the account (email:password) to /home/swong/dls/src/ahk/accounts
+# 2. Provision a fresh prefix (boots to startup_expired)
+python -m gt_spector.provision init bot08 --account sr02-11@mx1.us
+
+# 3. Power it on (display = 9 + bot number, so bot08 -> :17)
+python -m gt_spector start bot08
+
+# 4. Log in via the embedded browser (expired_login from startup_expired)
+python -m gt_spector --session :17 --cli
+#   > expired_login sr02-11@mx1.us bamboo-H4
+#   (answer y at each confirm; a second run may be needed if a confirm is
+#   consumed before its y)
+
+# 5. Start the help bot (navigates story -> shelter -> alliance -> help dialog)
+python3 /tmp/helpbot_bot08.py   # or start via the console's Start Help button
+
+# 6. Verify: bot sits in help_dialog, help button pixel (495,682) dim, clicks > 0
+```
