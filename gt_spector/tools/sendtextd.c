@@ -95,7 +95,8 @@ static void process_command(const char *line) {
         Sleep(120);
         type_text(c2 + 1);
     } else {
-        activate_game();
+        // Text-only: do NOT re-activate the window. Activation steals focus
+        // from the browser field that a prior xdotool click just focused.
         Sleep(60);
         type_text(line);
     }
