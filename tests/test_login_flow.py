@@ -1,4 +1,12 @@
-from gt_spector.login_flow import LoginFlow, LoginStateMachine
+from gt_spector.login_flow import IN_GAME_TEMPLATES, LoginFlow, LoginStateMachine
+
+
+def test_in_game_templates_exist_in_store():
+    """Every in-game detection template must be a registered template."""
+    from gt_spector import templates as _t
+
+    available = {t.name for t in _t.load_templates()}
+    assert set(IN_GAME_TEMPLATES) <= available
 
 
 class FakeGW:

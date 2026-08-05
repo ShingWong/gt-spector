@@ -27,9 +27,10 @@ CONTINUE = (500, 300)
 SELECT_ID = (350, 165)
 OK = (700, 560)
 
-# Reliable in-game templates (login succeeded). region_overview/avatar match
-# spuriously on the login page, so they are excluded.
-IN_GAME_TEMPLATES = ("region_static", "shelter")
+# Reliable in-game template (login succeeded). region_overview/avatar match
+# spuriously on the login page, so they are excluded. In-game detection
+# relies on region_static (shelter_view's region icon).
+IN_GAME_TEMPLATES = ("region_static",)
 
 
 def _window_click(session: Any, x: int, y: int) -> bool:
