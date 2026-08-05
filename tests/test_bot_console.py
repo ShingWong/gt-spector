@@ -1,3 +1,5 @@
+import subprocess
+
 import numpy as np
 import pytest
 
@@ -782,3 +784,26 @@ def test_unprovisioned_accounts_missing_file(tmp_path, monkeypatch):
     monkeypatch.setattr(bc, "ACCOUNTS_FILE", tmp_path / "nope")
     monkeypatch.setattr(bc, "PREFIXES_DIR", tmp_path / "prefixes")
     assert make_console()._unprovisioned_accounts() == []
+
+
+def test_provision_n_sequential_and_stops_on_failure(tmp_path, monkeypatch):
+    c = make_console()
+    calls = []
+    statuses = []
+
+    def fake_run(cmd, **kw):
+        calls.append(cmd)
+        name = cmd[cmd.index("init") + 1]
+        if name == "bot03":  # fail on the 3rd
+            return type("R", (), {"returncode": 1, "stderr": ""})()
+        return type("R", (), {"returncode": 0})()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    c._status = type("S", (), {"config": lambda s, text: statuses.append(text)})()
+    c._refresh_bots = lambda: None
+    c._tk = type("Tk", (), {"update": lambda s: None})()
+    c._unprovisioned_accounts = lambda: [
+        ("bot01", "a@x"), ("bot02", "b@x"), ("bot03", "c@x"), ("bot04", "d@x")]
+    c._provision_n(4)
+    # bot01, bot02 provisioned; bot03 failed -> stops, bot04 never run
+    assert [x[x.index("init") + 1] for x in calls] == ["bot01", "bot02", "bot03"]

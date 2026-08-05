@@ -156,6 +156,28 @@ class BotConsole:
             out.append((name, email))
         return out
 
+    def _provision_n(self, count: int) -> None:
+        """Provision the first `count` unprovisioned accounts, one at a time.
+
+        Sequential only (no parallel); verifies exit code 0 after each and stops
+        on the first failure. Refreshes the bot list when done.
+        """
+        pending = self._unprovisioned_accounts()[:count]
+        for name, email in pending:
+            self._status.config(text=f"Provisioning {name} ({email})...")
+            self._tk.update()
+            r = subprocess.run(
+                ["python3", "-m", "gt_spector.provision", "init", name,
+                 "--account", email],
+                capture_output=True, text=True, timeout=600, check=False)
+            if r.returncode != 0:
+                tail = (r.stderr or "").strip()[-60:]
+                self._status.config(text=f"{name}: FAILED ({tail})")
+                return
+            self._status.config(text=f"{name}: provisioned")
+        self._status.config(text=f"Provisioned {len(pending)} bot(s)")
+        self._refresh_bots()
+
     def _setup_menu(self) -> None:
         menubar = tk.Menu(self._tk)
         self._tk.config(menu=menubar)
