@@ -21,6 +21,8 @@ EMAIL_X = 365
 EYE_TEMPLATES = ("igg_login_eye2_static", "login_eye_static")
 EMAIL_Y_ABOVE_EYE = 100
 LOGIN_Y_BELOW_EYE = 70
+_EYE_POLL_INTERVAL = 0.5
+_EYE_POLL_TIMEOUT = 20.0
 CONTINUE = (500, 300)
 SELECT_ID = (350, 165)
 OK = (700, 560)
@@ -53,15 +55,25 @@ def _wait(session: Any, seconds: float = 4.0) -> None:
 
 
 def _find_eye(locator: Any, session: Any) -> tuple[int, int] | None:
-    """Locate the password-reveal eye icon (position varies by page render)."""
+    """Locate the password-reveal eye icon (position varies by page render).
+
+    The browser's X button renders before the form's eye icon, so a one-shot
+    check misses it. Poll (condition-based wait) until the eye renders or the
+    timeout elapses.
+    """
     if locator is None:
         from gt_spector.locator import Locator
         locator = Locator()
-    for name in EYE_TEMPLATES:
-        r = locator.find(session.frame, name)
-        if r.found:
-            return (r.cx, r.cy)
-    return None
+    deadline = time.monotonic() + _EYE_POLL_TIMEOUT
+    while True:
+        session.refresh()
+        for name in EYE_TEMPLATES:
+            r = locator.find(session.frame, name)
+            if r.found:
+                return (r.cx, r.cy)
+        if time.monotonic() >= deadline:
+            return None
+        time.sleep(_EYE_POLL_INTERVAL)
 
 
 def login(

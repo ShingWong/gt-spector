@@ -42,6 +42,54 @@ class FakeLoc:
         return type("R", (), {"found": found, "cx": self._eye[0], "cy": self._eye[1]})()
 
 
+def test_find_eye_polls_until_icon_renders(monkeypatch):
+    """The browser's eye icon renders a moment after the form's X button;
+    _find_eye must poll (condition-based wait), not check once."""
+    from gt_spector import login_flow as L
+
+    calls = {"n": 0}
+    class DelayedEyeLocator:
+        def find(self, frame, name):
+            calls["n"] += 1
+            if name != "igg_login_eye2_static":
+                return type("R", (), {"found": False})()
+            if calls["n"] < 3:  # not rendered yet
+                return type("R", (), {"found": False})()
+            return type("R", (), {"found": True, "cx": 880, "cy": 196})()
+
+    class RefreshingSession:
+        def __init__(self):
+            import numpy as np
+            self.frame = np.zeros((50, 50, 3), dtype=np.uint8)
+        def refresh(self):
+            pass
+
+    monkeypatch.setattr(L, "_EYE_POLL_INTERVAL", 0)
+    monkeypatch.setattr(L, "_EYE_POLL_TIMEOUT", 5)
+    pos = L._find_eye(DelayedEyeLocator(), RefreshingSession())
+    assert pos == (880, 196)
+    assert calls["n"] >= 3  # polled more than once
+
+
+def test_find_eye_returns_none_after_timeout(monkeypatch):
+    from gt_spector import login_flow as L
+
+    class NeverLocator:
+        def find(self, frame, name):
+            return type("R", (), {"found": False})()
+
+    class RefreshingSession:
+        def __init__(self):
+            import numpy as np
+            self.frame = np.zeros((50, 50, 3), dtype=np.uint8)
+        def refresh(self):
+            pass
+
+    monkeypatch.setattr(L, "_EYE_POLL_INTERVAL", 0)
+    monkeypatch.setattr(L, "_EYE_POLL_TIMEOUT", 2)
+    assert L._find_eye(NeverLocator(), RefreshingSession()) is None
+
+
 def test_login_uses_eye_derived_positions(monkeypatch):
     import gt_spector.typing as T
     from gt_spector import login_flow as L
