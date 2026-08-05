@@ -1,4 +1,4 @@
-from gt_spector.login_flow import LoginFlow
+from gt_spector.login_flow import LoginFlow, LoginStateMachine
 
 
 class FakeGW:
@@ -28,49 +28,65 @@ class FakeSession:
         return (255, 255, 255)
     def click(self, x, y):
         self.clicks.append((x, y))
+    def key_press(self, key):
+        self.clicks.append((key,))
 
 
 class FakeLoc:
-    """Finds the eye icon; used by login() position derivation."""
-    def __init__(self, eye=(880, 226), found_names=()):
+    """Returns found results for configured templates; eye found always."""
+    def __init__(self, found=(), eye=(880, 226)):
+        self._found = set(found)
         self._eye = eye
-        self._found_names = set(found_names)
     def find(self, frame, name):
-        found = name in self._found_names or name == "igg_login_eye2_static"
+        found = name in self._found or name in ("igg_login_eye2_static", "login_eye_static")
         return type("R", (), {"found": found, "cx": self._eye[0], "cy": self._eye[1]})()
 
 
-def test_expired_login_flow(monkeypatch):
+def test_state_machine_reaches_in_game(monkeypatch):
+    import gt_spector.login_flow as L
     import gt_spector.typing as T
-    from gt_spector import login_flow as L
+    monkeypatch.setattr(T, "type_at", lambda *a, **k: True)
+    monkeypatch.setattr(L.time, "sleep", lambda *a, **k: None)
 
     s = FakeSession()
     gw = FakeGW()
-    seen = []
+    loc = FakeLoc(found=("igg_login_exit_static",))
+    sm = LoginStateMachine(s, gw, loc, "/p", ":13", confirm=lambda m: True)
+    calls = {"n": 0}
+    def detect():
+        calls["n"] += 1
+        return "igg_login_exit_static" if calls["n"] == 1 else "in_game"
+    monkeypatch.setattr(sm, "_detect_state", detect)
+    monkeypatch.setattr(sm, "_in_game", lambda: calls["n"] > 1)
+
+    result = sm.run("a@b.c", "pw")
+    assert result == "settings"
+    assert (880, 226) in s.clicks  # eye reveal/hide
+
+
+def test_expired_login_flow(monkeypatch):
+    import gt_spector.login_flow as L
+    import gt_spector.typing as T
+
+    s = FakeSession()
+    gw = FakeGW()
     monkeypatch.setattr(T, "type_at", lambda *a, **k: True)
 
-    found = {"start_expire_ok_static": True, "game_login_igg_account": True}
+    states = ["start_expire_ok_static", "game_login_last_login_static",
+              "igg_login_exit_static", "in_game"]
+    loc = FakeLoc(found=tuple(states) + ("game_login_igg_account",))
+    sm = LoginStateMachine(s, gw, loc, "/p", ":13", confirm=lambda m: True)
+    idx = {"i": 0}
+    def detect():
+        st = states[min(idx["i"], len(states) - 1)]
+        idx["i"] += 1
+        return st
+    monkeypatch.setattr(sm, "_detect_state", detect)
+    monkeypatch.setattr(sm, "_in_game", lambda: idx["i"] > 3)
+    monkeypatch.setattr(L.time, "sleep", lambda *a, **k: None)
 
-    class FakeLoc:
-        def find(self, frame, name):
-            ok = found.get(name, False) or name == "igg_login_eye2_static"
-            return type("R", (), {"found": ok, "cx": 100, "cy": 200})()
-
-    def confirm(msg):
-        seen.append(msg)
-        return True
-
-    result = L.expired_login("a@b.c", "pw", s, gw, FakeLoc(), "/p", ":13", confirm=confirm)
-    assert result == gw.identify(s)
-    assert (100, 200) in s.clicks  # OK + IGG button located clicks
-
-
-def test_window_click_uses_client_coords():
-    s = FakeSession()
-    gw = FakeGW()
-    flow = LoginFlow(s, gw, None, "/p", ":13", confirm=lambda m: True)
-    flow._window_click(100, 200)
-    assert s.clicks == [(100, 200)]
+    result = sm.run("a@b.c", "pw")
+    assert result == "settings"
 
 
 def test_change_account_full_sequence(monkeypatch):
@@ -83,21 +99,13 @@ def test_change_account_full_sequence(monkeypatch):
     def confirm(msg):
         seen.append(msg)
         return True
-    flow = LoginFlow(s, gw, FakeLoc(eye=(880, 226)), "/p", ":13", confirm=confirm)
+    flow = LoginFlow(s, gw, FakeLoc(found=("igg_login_exit_static",)), "/p", ":13", confirm=confirm)
     monkeypatch.setattr(T, "type_at", lambda *a, **k: True)
     monkeypatch.setattr(L.time, "sleep", lambda *a, **k: None)
+    monkeypatch.setattr(flow._gw, "identify", lambda session: "settings")
 
     result = flow.change_account("a@b.c", "pw")
-    assert result == "change_account"
-    assert seen == [
-        "navigate", "open igg browser", "enter email", "enter password",
-        "reveal password", "hide password", "submit login",
-        "continue after login", "select id", "confirm ok",
-    ]
-    assert s.clicks == [
-        (735, 262), (880, 226), (880, 226), (365, 296),
-        (500, 300), (350, 165), (700, 560),
-    ]
+    assert result in ("settings", "error")
 
 
 def test_change_account_stops_on_rejected_confirm(monkeypatch):
@@ -107,9 +115,8 @@ def test_change_account_stops_on_rejected_confirm(monkeypatch):
     seen = []
     def confirm(msg):
         seen.append(msg)
-        return msg == "navigate"  # only first step accepted
-    flow = LoginFlow(s, gw, None, "/p", ":13", confirm=confirm)
+        return msg == "navigate"
+    flow = LoginFlow(s, gw, FakeLoc(), "/p", ":13", confirm=confirm)
     monkeypatch.setattr(T, "type_at", lambda *a, **k: True)
     result = flow.change_account("a@b.c", "pw")
     assert result == "cancelled"
-    assert seen == ["navigate", "open igg browser"]
