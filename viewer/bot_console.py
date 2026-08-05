@@ -262,6 +262,7 @@ class BotConsole:
         self._tree_tip: tk.Toplevel | None = None
         self._tree_tip_label: ttk.Label | None = None
         self._runners: dict[str, ScriptRunner] = {}
+        self._restart_runner_pending: set[str] = set()
         self._build_rows()
 
     def _build_rows(self) -> None:
@@ -743,9 +744,12 @@ class BotConsole:
         if not self._monitor.check_responsiveness(bot, now):
             self._monitor.mark_crash(bot)
             logs.log_bot(bot.name, "non-responsive, restarting game")
+            self._stop_stale_runner(bot)
             self._manager.restart_game(bot)
             self._monitor.mark_intervention(bot)
             return
+        if bot.name in self._restart_runner_pending:
+            self._restart_pending_runner(bot)
         if runner and runner.script:
             # Self-healing scripts (HelpBot) re-navigate on their own thread;
             # console recovery would crash (run_script) or fight the thread.
@@ -765,6 +769,33 @@ class BotConsole:
                         bot.state = BotState.ERROR
                 else:
                     self._monitor.recovery_succeeded(bot)
+
+    def _stop_stale_runner(self, bot: Bot) -> None:
+        """Stop a runner whose game is being restarted; restart it once up.
+
+        HelpBot threads poll the old session/SHM and die or go stale when the
+        game restarts. Record the pending restart; the next responsive pass
+        (new PID) brings it back via run_script.
+        """
+        runner = self._runners.get(bot.name)
+        if runner is None:
+            return
+        self._restart_runner_pending.add(bot.name)
+        try:
+            runner.stop()
+        except Exception:  # noqa: BLE001 - never let cleanup kill the poll
+            logs.log_bot(bot.name, "runner stop during game restart failed")
+
+    def _restart_pending_runner(self, bot: Bot) -> None:
+        """Restart a runner marked for restart once the game is responsive."""
+        self._restart_runner_pending.discard(bot.name)
+        runner = self._runners.get(bot.name)
+        if runner is None:
+            return
+        try:
+            runner.run_script(runner.script)
+        except Exception:  # noqa: BLE001 - one bot must not kill the poll
+            logs.log_bot(bot.name, "runner restart failed, continuing")
 
     def _poll(self) -> None:
         self._nav_cache = None

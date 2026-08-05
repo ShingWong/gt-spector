@@ -8,6 +8,7 @@ from viewer.bot_console import BotConsole
 def make_console() -> BotConsole:
     c = object.__new__(BotConsole)
     c._sound_applied = {}
+    c._restart_runner_pending = set()
     return c
 
 
@@ -333,6 +334,108 @@ def test_monitor_tick_crash_restarts_game(tmp_path, monkeypatch):
     assert calls.count("crash") == 1
     assert calls.count("restart") == 1
     assert calls.count("intervention") == 1
+
+
+def test_monitor_tick_stops_and_restarts_self_healing_runner_on_crash(tmp_path, monkeypatch):
+    """A game restart must restart the bot's HelpBot runner afterwards."""
+    from gt_spector import logs
+    from gt_spector.scripts.help_bot import HelpBot
+
+    monkeypatch.setattr(logs, "LOGS_DIR", tmp_path)
+    c = make_console()
+    bot = make_bot()
+    bot.pid = 111
+    calls = []
+
+    class FakeManager:
+        def __init__(self):
+            self.bots = [bot]
+
+        def restart_game(self, bot):
+            calls.append("restart")
+            bot.pid = 222
+
+    c._manager = FakeManager()
+    hb = HelpBot()
+    hb.stop = lambda: calls.append("stop")
+    hb.run_script = lambda *a, **k: calls.append("run_script")
+    hb.self_healing = True
+    c._runners = {"bot01": hb}
+    c._frames = {"bot01": None}
+
+    class FakeMonitor:
+        def note_running(self, bot, now):
+            pass
+
+        def check_responsiveness(self, bot, now):
+            calls.append("check")
+            return False
+
+        def mark_crash(self, bot):
+            pass
+
+        def mark_intervention(self, bot):
+            pass
+
+    c._monitor = FakeMonitor()
+    c._monitor_tick()
+    # The stale HelpBot must be stopped when the game restarts so it can be
+    # restarted once the game is back up.
+    assert "stop" in calls
+
+
+def test_monitor_tick_restarts_runner_after_game_recovers(tmp_path, monkeypatch):
+    """Once the restarted game is responsive, the HelpBot is brought back."""
+    from gt_spector import logs
+    from gt_spector.scripts.help_bot import HelpBot
+
+    monkeypatch.setattr(logs, "LOGS_DIR", tmp_path)
+    c = make_console()
+    bot = make_bot()
+    bot.pid = 111
+    calls = []
+
+    class FakeManager:
+        def __init__(self):
+            self.bots = [bot]
+
+        def restart_game(self, bot):
+            calls.append("restart")
+
+    c._manager = FakeManager()
+    hb = HelpBot()
+    hb.stop = lambda: calls.append("stop")
+    hb.run_script = lambda *a, **k: calls.append("run_script")
+    hb.self_healing = True
+    c._runners = {"bot01": hb}
+    c._frames = {"bot01": None}
+    responsive = {"value": False}
+
+    class FakeMonitor:
+        def note_running(self, bot, now):
+            pass
+
+        def check_responsiveness(self, bot, now):
+            return responsive["value"]
+
+        def mark_crash(self, bot):
+            pass
+
+        def mark_intervention(self, bot):
+            pass
+
+    c._monitor = FakeMonitor()
+
+    # Pass 1: crash -> stop stale runner, mark restart pending.
+    c._monitor_tick()
+    assert "stop" in calls
+    assert "bot01" in c._restart_runner_pending
+
+    # Pass 2: game responsive -> runner restarted, pending cleared.
+    responsive["value"] = True
+    c._monitor_tick()
+    assert "run_script" in calls
+    assert "bot01" not in c._restart_runner_pending
 
 
 def test_save_geometry_atomic(tmp_path, monkeypatch):
