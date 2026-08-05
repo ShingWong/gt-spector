@@ -212,43 +212,47 @@ class BotConsole:
         pending = self._unprovisioned_accounts()[:count]
 
         def _set_status(text: str) -> None:
-            self._tk.after(0, lambda: self._status.config(text=text))
+            self._set_provision_progress(text)
 
         def worker() -> None:
-            for name, email in pending:
-                _set_status(f"Provisioning {name} ({email})...")
-                try:
-                    r = subprocess.run(
-                        [sys.executable, "-m", "gt_spector.provision", "init",
-                         name, "--account", email],
-                        capture_output=True, text=True, timeout=600, check=False)
-                except (OSError, subprocess.TimeoutExpired) as e:
-                    _set_status(f"{name}: FAILED ({e})")
-                    return
-                if r.returncode != 0:
-                    tail = (r.stderr or r.stdout or "").strip()[-60:]
-                    _set_status(f"{name}: FAILED ({tail})")
-                    return
-                _set_status(f"{name}: provisioned, starting...")
-                bot = self._manager.get(name)
-                if bot is None:
-                    _set_status(f"{name}: FAILED (no bot)")
-                    return
-                try:
-                    self._manager.start_game(bot)
-                    password = self._login_password(email)
-                    result = self._boot_and_login(bot, email, password)
-                except Exception as e:  # noqa: BLE001 - report, don't die silently
-                    _set_status(f"{name}: FAILED ({e})")
-                    return
-                if result in ("in_game", "shelter_view", "world_map",
-                              "start_norah", "glory_league_event", None):
-                    _set_status(f"{name}: logged in")
-                else:
-                    _set_status(f"{name}: login failed ({result})")
-                    return
-            self._tk.after(0, self._refresh_bots)
-            _set_status(f"Provisioned {len(pending)} bot(s)")
+            self._tk.after(0, self._show_provision_progress)
+            try:
+                for name, email in pending:
+                    _set_status(f"Provisioning {name} ({email})...")
+                    try:
+                        r = subprocess.run(
+                            [sys.executable, "-m", "gt_spector.provision", "init",
+                             name, "--account", email],
+                            capture_output=True, text=True, timeout=600, check=False)
+                    except (OSError, subprocess.TimeoutExpired) as e:
+                        _set_status(f"{name}: FAILED ({e})")
+                        return
+                    if r.returncode != 0:
+                        tail = (r.stderr or r.stdout or "").strip()[-60:]
+                        _set_status(f"{name}: FAILED ({tail})")
+                        return
+                    _set_status(f"{name}: provisioned, starting...")
+                    bot = self._manager.get(name)
+                    if bot is None:
+                        _set_status(f"{name}: FAILED (no bot)")
+                        return
+                    try:
+                        self._manager.start_game(bot)
+                        password = self._login_password(email)
+                        result = self._boot_and_login(bot, email, password)
+                    except Exception as e:  # noqa: BLE001 - report, don't die silently
+                        _set_status(f"{name}: FAILED ({e})")
+                        return
+                    if result in ("in_game", "shelter_view", "world_map",
+                                  "start_norah", "glory_league_event", None):
+                        _set_status(f"{name}: logged in")
+                    else:
+                        _set_status(f"{name}: login failed ({result})")
+                        return
+                self._tk.after(0, self._refresh_bots)
+                _set_status(f"Provisioned {len(pending)} bot(s)")
+            finally:
+                self._hide_provision_progress()
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -856,6 +860,22 @@ class BotConsole:
     def _setup_statusbar(self) -> None:
         self._status = ttk.Label(self._tk, text="Ready", relief=tk.SUNKEN, anchor=tk.W)
         self._status.pack(side=tk.BOTTOM, fill=tk.X)
+        self._provision_status = ttk.Label(
+            self._tk, text="", anchor=tk.W, foreground="#cc0000",
+            font=("", 10, "bold"))
+        # hidden by default; _provision_n shows it during provisioning
+
+    def _show_provision_progress(self) -> None:
+        try:
+            self._provision_status.pack(side=tk.BOTTOM, fill=tk.X, padx=4, pady=2)
+        except Exception:  # noqa: BLE001, S110 - already visible
+            pass
+
+    def _set_provision_progress(self, text: str) -> None:
+        self._tk.after(0, lambda: self._provision_status.config(text=text))
+
+    def _hide_provision_progress(self) -> None:
+        self._tk.after(0, lambda: self._provision_status.pack_forget())
 
     def _start_monitor_worker(self) -> None:
         """Background daemon thread running the monitor tick.
