@@ -166,6 +166,8 @@ locations:
   account_title:     {x: 573, y: 145, screens: [account]}
   igg_id_static:     {x: 197, y: 223, screens: [change_account]}
   igg_account_static: {x: 735, y: 262, screens: [change_account]}
+  game_login_igg_account: {x: 635, y: 585, screens: [game_login]}
+  game_login_last_login_static: {x: 305, y: 705, screens: [game_login]}
   start_session_expired_static: {x: 638, y: 406, screens: [startup_expired]}
   start_expire_ok_static: {x: 576, y: 561, screens: [startup_expired]}
   start_expire_more_static: {x: 651, y: 602, screens: [startup_login]}
@@ -266,6 +268,11 @@ screens:
   startup_expired:
     description: startup session-expired dialog with OK button.
     templates: [start_session_expired_static]
+  game_login:
+    description: game login page after an expired session. Background shifts
+      so the IGG account button position varies; identify by the fixed last-
+      login text and click the dynamic IGG account button.
+    templates: [game_login_last_login_static]
   start_norah:
     description: startup Norah story screen. Only navigation is ESC to the
       next screen (an event screen or the shelter view). The next screen is
@@ -343,6 +350,8 @@ navigation:
     igg_login:          {action: locate, name: igg_account_static}
   startup_expired:
     world_map:          {action: locate, name: start_expire_ok_static}
+  game_login:
+    igg_login:          {action: locate, name: game_login_igg_account}
   glory_league_event:
     shelter_view:       {action: click, location: glory_league_go}
   settings:
