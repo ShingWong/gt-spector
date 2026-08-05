@@ -263,6 +263,7 @@ class BotConsole:
         self._tree_tip_label: ttk.Label | None = None
         self._runners: dict[str, ScriptRunner] = {}
         self._restart_runner_pending: set[str] = set()
+        self._pending_restart_script: dict[str, Any] = {}
         self._build_rows()
 
     def _build_rows(self) -> None:
@@ -780,6 +781,8 @@ class BotConsole:
         runner = self._runners.get(bot.name)
         if runner is None:
             return
+        if runner.script is not None:
+            self._pending_restart_script[bot.name] = runner.script
         self._restart_runner_pending.add(bot.name)
         try:
             runner.stop()
@@ -788,12 +791,18 @@ class BotConsole:
 
     def _restart_pending_runner(self, bot: Bot) -> None:
         """Restart a runner marked for restart once the game is responsive."""
-        self._restart_runner_pending.discard(bot.name)
         runner = self._runners.get(bot.name)
         if runner is None:
+            self._restart_runner_pending.discard(bot.name)
+            self._pending_restart_script.pop(bot.name, None)
+            return
+        script = self._pending_restart_script.pop(bot.name, None)
+        if script is None or not hasattr(runner, "run_script"):
+            self._restart_runner_pending.discard(bot.name)
             return
         try:
-            runner.run_script(runner.script)
+            runner.run_script(script)
+            self._restart_runner_pending.discard(bot.name)
         except Exception:  # noqa: BLE001 - one bot must not kill the poll
             logs.log_bot(bot.name, "runner restart failed, continuing")
 

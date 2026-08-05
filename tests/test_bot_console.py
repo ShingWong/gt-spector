@@ -9,6 +9,7 @@ def make_console() -> BotConsole:
     c = object.__new__(BotConsole)
     c._sound_applied = {}
     c._restart_runner_pending = set()
+    c._pending_restart_script = {}
     return c
 
 
@@ -435,6 +436,95 @@ def test_monitor_tick_restarts_runner_after_game_recovers(tmp_path, monkeypatch)
     responsive["value"] = True
     c._monitor_tick()
     assert "run_script" in calls
+    assert "bot01" not in c._restart_runner_pending
+
+
+def test_monitor_tick_runner_without_run_script_skips_restart(tmp_path, monkeypatch):
+    """A NavigateBot-like runner (no run_script) must not be run on restart."""
+    from gt_spector import logs
+
+    monkeypatch.setattr(logs, "LOGS_DIR", tmp_path)
+    c = make_console()
+    bot = make_bot()
+    bot.pid = 111
+    c._manager = type("M", (), {"bots": [bot]})()
+    nav = type("N", (), {"script": object(), "stop": lambda self: None})()
+    c._runners = {"bot01": nav}
+    c._frames = {"bot01": None}
+    logged = []
+    monkeypatch.setattr(logs, "log_bot", lambda name, msg: logged.append(msg))
+    responsive = {"value": False}
+
+    class FakeMonitor:
+        def note_running(self, bot, now):
+            pass
+
+        def check_responsiveness(self, bot, now):
+            return responsive["value"]
+
+        def mark_crash(self, bot):
+            pass
+
+        def mark_intervention(self, bot):
+            pass
+
+    c._monitor = FakeMonitor()
+
+    # Crash -> stale runner stopped, restart marked pending.
+    c._monitor_tick()
+    assert "bot01" in c._restart_runner_pending
+
+    # Game back -> the runner is skipped (no run_script), pending cleared.
+    responsive["value"] = True
+    c._monitor_tick()
+    assert "bot01" not in c._restart_runner_pending
+    assert not any("restart failed" in m for m in logged)
+
+
+def test_monitor_tick_restarts_script_runner_with_captured_script(tmp_path, monkeypatch):
+    """A ScriptRunner restart must use the script captured before stop, not
+    the (now-None) runner.script."""
+    from gt_spector import logs
+    from gt_spector.script import ScriptRunner
+
+    monkeypatch.setattr(logs, "LOGS_DIR", tmp_path)
+    c = make_console()
+    bot = make_bot()
+    bot.pid = 111
+    c._manager = type("M", (), {"bots": [bot]})()
+    started = []
+    script = type("S", (), {"on_start": lambda s, d: started.append(d),
+                             "on_stop": lambda s, d: None})()
+    runner = ScriptRunner(10, None, None, None)
+    runner.start(script)
+    c._runners = {"bot01": runner}
+    c._frames = {"bot01": None}
+    responsive = {"value": False}
+
+    class FakeMonitor:
+        def note_running(self, bot, now):
+            pass
+
+        def check_responsiveness(self, bot, now):
+            return responsive["value"]
+
+        def mark_crash(self, bot):
+            pass
+
+        def mark_intervention(self, bot):
+            pass
+
+    c._monitor = FakeMonitor()
+
+    # Crash -> stop nulls runner.script; the captured script survives.
+    c._monitor_tick()
+    assert runner.script is None
+
+    # Game back -> restarted with the captured script, not None.
+    responsive["value"] = True
+    c._monitor_tick()
+    assert runner.script is script
+    assert started == [10, 10]
     assert "bot01" not in c._restart_runner_pending
 
 
