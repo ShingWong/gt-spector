@@ -1,12 +1,11 @@
-"""IGG login: state-machine navigation + working browser login.
+"""IGG login: state-machine navigation + verified browser login.
 
-The path to the browser login (expired-session dialog -> game login page ->
-IGG browser) is modeled as a locator-driven state machine that adapts to
-whatever screen is present. Once on the IGG browser login form, the proven
-login() routine (eye-derived field positions, sendtext.exe typing) takes
-over and completes the login through the ID-select/confirm screens.
-
-Credential entry is NOT rewritten: it is the same code verified on bot05.
+The path to the IGG browser login (expired-session dialog -> game login
+page -> browser) is driven by a locator-based state machine that adapts to
+whatever screen is present (the page layout shifts between renders). Once on
+the browser login form, the proven login() routine takes over and completes
+the login (eye-derived field positions, sendtext.exe typing, continue/select-
+ID/confirm). login() is the exact code verified on bot05 — not rewritten.
 """
 
 from __future__ import annotations
@@ -19,28 +18,30 @@ from gt_spector import typing
 from gt_spector.game_world import GameWorld
 
 EMAIL_X = 365
+EYE_TEMPLATES = ("igg_login_eye2_static", "login_eye_static")
 EMAIL_Y_ABOVE_EYE = 100
 LOGIN_Y_BELOW_EYE = 70
-
-EYE_TEMPLATES = ("igg_login_eye2_static", "login_eye_static")
+CONTINUE = (500, 300)
+SELECT_ID = (350, 165)
+OK = (700, 560)
 
 # Reliable in-game templates (login succeeded). region_overview/avatar match
 # spuriously on the login page, so they are excluded.
 IN_GAME_TEMPLATES = ("region_static", "shelter")
 
 
-def _wait(session: Any, seconds: float = 4.0) -> None:
-    time.sleep(seconds)
-    session.refresh()
+def _window_click(session: Any, x: int, y: int) -> bool:
+    session.click(x, y)
+    return True
 
 
 def _type(prefix: str, display: str, text: str, x: int, y: int) -> bool:
     return typing.type_at(prefix, display, f"{{CtrlA}}{text}", x, y)
 
 
-def _window_click(session: Any, x: int, y: int) -> bool:
-    session.click(x, y)
-    return True
+def _wait(session: Any, seconds: float = 4.0) -> None:
+    time.sleep(seconds)
+    session.refresh()
 
 
 def _find_eye(locator: Any, session: Any) -> tuple[int, int] | None:
@@ -87,10 +88,10 @@ def login(
         ("enter password", lambda: _type(prefix, display, password, *pass_pos)),
         ("reveal password", lambda: _window_click(session, *eye)),
         ("hide password", lambda: _window_click(session, *eye)),
-        ("submit login", lambda: _window_click(session, *login_pos)),
-        ("continue after login", lambda: _window_click(session, 500, 300)),
-        ("select id", lambda: _window_click(session, 350, 165)),
-        ("confirm ok", lambda: _window_click(session, 700, 560)),
+        ("submit login", lambda: _submit_login(session, login_pos)),
+        ("continue after login", lambda: _window_click(session, *CONTINUE)),
+        ("select id", lambda: _select_id(session)),
+        ("confirm ok", lambda: _window_click(session, *OK)),
     ]
     for label, fn in steps:
         if not confirm(label):
@@ -101,12 +102,24 @@ def login(
     return gw.identify(session) or "unknown"
 
 
-class LoginStateMachine:
-    """Drive navigation to the IGG browser, then call login().
+def _submit_login(session: Any, login_pos: tuple[int, int]) -> bool:
+    session.click(*login_pos)
+    _wait(session, 5)
+    return True
 
-    States are detected by locating templates. On the browser login form
-    (igg_login), the working login() completes the flow. Unknown states fall
-    back to the Navigator's ESC recovery.
+
+def _select_id(session: Any) -> bool:
+    session.click(*SELECT_ID)
+    _wait(session, 5)
+    return True
+
+
+class LoginStateMachine:
+    """Drive navigation to the IGG browser, then hand off to login().
+
+    States are detected by locating templates. The browser login form
+    (igg_login) delegates to the verified login() routine. Unknown states
+    fall back to the Navigator's ESC recovery.
     """
 
     def __init__(
@@ -160,7 +173,7 @@ class LoginStateMachine:
                     return "error"
                 self._session.click(r.cx, r.cy)
             elif state == "igg_login_exit_static":
-                # Browser login form reached: use the proven login() routine.
+                # Browser login form reached: use the verified login().
                 return login(
                     email, password,
                     self._session, self._gw, self._locator,
