@@ -342,6 +342,9 @@ class BotConsole:
         ttk.Button(toolbar, text="Start Help", command=self._start_help_bot).pack(side=tk.LEFT, padx=2)
         ttk.Button(toolbar, text="Stop Help", command=self._stop_help_bots).pack(side=tk.LEFT, padx=2)
         ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=4)
+        ttk.Button(toolbar, text="☑ All", command=self._check_all).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="☐ None", command=self._uncheck_all).pack(side=tk.LEFT, padx=2)
+        ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=4)
         ttk.Button(toolbar, text="Clear Status",
                    command=lambda: self._status.config(text="Ready")).pack(side=tk.LEFT, padx=2)
         ttk.Button(toolbar, text="Clear Logs", command=self._clear_logs).pack(side=tk.LEFT, padx=2)
@@ -470,6 +473,21 @@ class BotConsole:
             return False
         return expected is not None and loc != expected
 
+    def _loc_label(self, loc: str | None, runner: Any = None) -> str | None:
+        """Friendly Loc label: 'Alliance Help' when a help loop is active on
+        the help area; otherwise the raw location name."""
+        if runner is None:
+            runner = next(
+                (r for r in self._runners.values()
+                 if getattr(getattr(r, "script", None), "self_healing", False)),
+                None,
+            )
+        if (runner is not None
+                and getattr(runner.script, "self_healing", False)
+                and loc in ("EVENT", "help_dialog", "ALLIANCE_HELP")):
+            return "Alliance Help"
+        return loc
+
     def _nav_table(self) -> dict[str, Any]:
         cache = cast(dict[str, Any] | None, getattr(self, "_nav_cache", None))
         if cache is not None:
@@ -502,6 +520,7 @@ class BotConsole:
             self._tooltips[bot.name] = self._status_tooltip(bot, frame)
             loc = self._detect_location(bot, frame)
             runner = self._runners.get(bot.name)
+            loc = self._loc_label(loc, runner)
             script = runner.script.name if runner and runner.script else ""
             status_text = self._status_text(script, loc)
             activity = ""

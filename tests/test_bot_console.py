@@ -1227,3 +1227,26 @@ def test_provision_n_updates_dedicated_label_not_footer(monkeypatch):
     time.sleep(0.1)
     assert any("Provisioning bot10" in t for t in label_updates), label_updates
     assert "Provisioning bot10" not in "".join(footer_updates), footer_updates
+
+
+def test_loc_label_alliance_help_when_help_runner_active():
+    c = make_console()
+    runner = type("R", (), {"script": type("S", (), {"self_healing": True})()})()
+    c._runners = {"bot01": runner}
+    assert c._loc_label("EVENT") == "Alliance Help"
+    assert c._loc_label("help_dialog") == "Alliance Help"
+    assert c._loc_label("ALLIANCE_HELP") == "Alliance Help"
+
+
+def test_loc_label_unchanged_without_help_runner():
+    c = make_console()
+    c._runners = {}
+    assert c._loc_label("EVENT") == "EVENT"
+    assert c._loc_label("shelter_view") == "shelter_view"
+
+
+def test_loc_label_unchanged_when_runner_not_self_healing():
+    c = make_console()
+    runner = type("R", (), {"script": type("S", (), {"self_healing": False})()})()
+    c._runners = {"bot01": runner}
+    assert c._loc_label("EVENT") == "EVENT"
