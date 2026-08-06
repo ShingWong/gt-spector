@@ -98,6 +98,7 @@ class BotManager:
             # Xvfb alone is not a running game; the game may have crashed
             # or exited after the display started. Report transitional so the
             # console allows a start/stop.
+            bot.pid = None
             bot.state = BotState.STARTING
             return
         bot.state = BotState.OFFLINE
