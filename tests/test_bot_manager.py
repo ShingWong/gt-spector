@@ -39,3 +39,4 @@ def test_stop_game_kills_xvfb(monkeypatch):
     m.stop_game(bot)
     # the xvfb_pid must have been killed
     assert 12345 in killed
+    assert bot.xvfb_pid is None
