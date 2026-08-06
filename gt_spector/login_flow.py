@@ -25,6 +25,7 @@ _EYE_POLL_INTERVAL = 0.5
 _EYE_POLL_TIMEOUT = 20.0
 FIELD_FOCUS_WAIT = 1.0
 POST_TYPE_WAIT = 0.5
+PAGE_SETTLE_WAIT = 1.5
 CONTINUE = (500, 300)
 SELECT_ID = (350, 165)
 OK = (700, 560)
@@ -106,6 +107,11 @@ def login(
     if eye is None:
         return "error: eye icon not found"
     _, ey = eye
+    # The browser is still settling when the eye first renders; wait for it
+    # to finish laying out before the first field interaction, or the email
+    # click can land before the field is interactive.
+    time.sleep(PAGE_SETTLE_WAIT)
+    session.refresh()
     email_pos = (EMAIL_X, ey - EMAIL_Y_ABOVE_EYE)
     pass_pos = (EMAIL_X, ey)
     login_pos = (EMAIL_X, ey + LOGIN_Y_BELOW_EYE)
