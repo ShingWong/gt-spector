@@ -23,6 +23,8 @@ EMAIL_Y_ABOVE_EYE = 100
 LOGIN_Y_BELOW_EYE = 70
 _EYE_POLL_INTERVAL = 0.5
 _EYE_POLL_TIMEOUT = 20.0
+FIELD_FOCUS_WAIT = 1.0
+POST_TYPE_WAIT = 0.5
 CONTINUE = (500, 300)
 SELECT_ID = (350, 165)
 OK = (700, 560)
@@ -41,11 +43,15 @@ def _window_click(session: Any, x: int, y: int) -> bool:
 def _type(session: Any, prefix: str, display: str, text: str, x: int, y: int) -> bool:
     # Click the field via xdotool (the browser registers xdotool clicks), then
     # send text via the wine helper (text-only, no click — the click already
-    # focused the field, and the helper re-clicking would steal focus).
+    # focused the field, and the helper re-clicking would steal focus). The
+    # embedded browser responds slowly to input, so wait long enough after the
+    # click for the field to accept typing before sending text.
     if text:
         session.click(x, y)
-        time.sleep(2)
-        return typing.type_text(prefix, display, f"{{CtrlA}}{text}")
+        time.sleep(FIELD_FOCUS_WAIT)
+        ok = typing.type_text(prefix, display, f"{{CtrlA}}{text}")
+        time.sleep(POST_TYPE_WAIT)
+        return ok
     session.click(x, y)
     return True
 
