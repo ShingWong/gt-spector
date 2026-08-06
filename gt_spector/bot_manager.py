@@ -244,13 +244,7 @@ class BotManager:
         return pids
 
     def stop_game(self, bot: Bot) -> None:
-        """Kill every Doomsday.exe on the bot's display.
-
-        The tracked `bot.pid` is a start.exe wrapper whose process group may
-        not cover the real Doomsday.exe (it reparents to init). Killing only
-        that group can leave a stale game running on the same display, which
-        then competes for focus/rendering. So we kill all matching pids.
-        """
+        """Kill every Doomsday.exe on the bot's display, then its Xvfb."""
         if bot.pid and self._pid_alive(bot.pid):
             os.killpg(os.getpgid(bot.pid), signal.SIGTERM)
             time.sleep(1)
@@ -267,6 +261,13 @@ class BotManager:
                 pass
         if bot.pid and self._pid_alive(bot.pid):
             os.killpg(os.getpgid(bot.pid), signal.SIGKILL)
+        # Clean up the display so a stale Xvfb can't look like a running game.
+        if bot.xvfb_pid and self._pid_alive(bot.xvfb_pid):
+            try:
+                os.killpg(os.getpgid(bot.xvfb_pid), signal.SIGTERM)
+            except (OSError, ProcessLookupError):
+                pass
+            bot.xvfb_pid = None
         bot.pid = None
         bot.state = BotState.OFFLINE
 
