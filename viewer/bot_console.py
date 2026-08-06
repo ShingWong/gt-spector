@@ -473,15 +473,10 @@ class BotConsole:
             return False
         return expected is not None and loc != expected
 
-    def _loc_label(self, loc: str | None, runner: Any = None) -> str | None:
-        """Friendly Loc label: 'Alliance Help' when a help loop is active on
-        the help area; otherwise the raw location name."""
-        if runner is None:
-            runner = next(
-                (r for r in self._runners.values()
-                 if getattr(getattr(r, "script", None), "self_healing", False)),
-                None,
-            )
+    @staticmethod
+    def _loc_label(loc: str | None, runner: Any | None) -> str | None:
+        """Friendly Loc label: 'Alliance Help' when this bot's help loop is
+        active on the help area; otherwise the raw location name."""
         if (runner is not None
                 and getattr(runner.script, "self_healing", False)
                 and loc in ("EVENT", "help_dialog", "ALLIANCE_HELP")):

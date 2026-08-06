@@ -1232,21 +1232,28 @@ def test_provision_n_updates_dedicated_label_not_footer(monkeypatch):
 def test_loc_label_alliance_help_when_help_runner_active():
     c = make_console()
     runner = type("R", (), {"script": type("S", (), {"self_healing": True})()})()
-    c._runners = {"bot01": runner}
-    assert c._loc_label("EVENT") == "Alliance Help"
-    assert c._loc_label("help_dialog") == "Alliance Help"
-    assert c._loc_label("ALLIANCE_HELP") == "Alliance Help"
+    assert c._loc_label("EVENT", runner) == "Alliance Help"
+    assert c._loc_label("help_dialog", runner) == "Alliance Help"
+    assert c._loc_label("ALLIANCE_HELP", runner) == "Alliance Help"
 
 
-def test_loc_label_unchanged_without_help_runner():
+def test_loc_label_unchanged_without_runner():
     c = make_console()
-    c._runners = {}
-    assert c._loc_label("EVENT") == "EVENT"
-    assert c._loc_label("shelter_view") == "shelter_view"
+    assert c._loc_label("EVENT", None) == "EVENT"
+    assert c._loc_label("shelter_view", None) == "shelter_view"
 
 
 def test_loc_label_unchanged_when_runner_not_self_healing():
     c = make_console()
     runner = type("R", (), {"script": type("S", (), {"self_healing": False})()})()
-    c._runners = {"bot01": runner}
-    assert c._loc_label("EVENT") == "EVENT"
+    assert c._loc_label("EVENT", runner) == "EVENT"
+
+
+def test_loc_label_not_contaminated_by_other_bots_runner():
+    c = make_console()
+    c._runners = {
+        "bot01": type("R", (), {"script": type("S", (), {"self_healing": False})()})(),
+        "bot02": type("R", (), {"script": type("S", (), {"self_healing": True})()})(),
+    }
+    # bot01 has no self-healing runner of its own
+    assert c._loc_label("EVENT", c._runners["bot01"]) == "EVENT"
