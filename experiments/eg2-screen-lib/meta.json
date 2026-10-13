@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "suite": "eg2-screen-lib",
+  "label": "initial-survey-and-autonomous-tutorial",
+  "host": "10.0.0.19",
+  "started": "2026-10-12T17:25:18Z",
+  "sha": "9bd5907",
+  "dirty": true,
+  "corpus": "bot16/bot17 headless instances, DXVK offscreen swapchains",
+  "knobs": {
+    "eg2": ":8091 llama-eg2.service, embeddinggemma-2 Q8_0 + mmproj, --pooling mean",
+    "llm": ":8080 Qwen3.8-27B Q4_0 + mmproj, -c 32768 -np 1",
+    "template_threshold": 0.75,
+    "template_patch": "10% crop of hero-upgrade banner rect (677,349,475,135) -> (840,395,150,45)",
+    "autonomy_target": "tutorial completion with zero human intervention"
+  },
+  "headline": "layered screen doctrine validated: template patch 1.000 vs <=0.492 at thr 0.75 CPU-only; EG2 text->image cos 0.780; autonomous tutorial completed with 0 interventions",
+  "verdict": "EG2 earns its place as layer 2 of the cascade (naming unknown overlays), not as a text embedder",
+  "duration_s": 62562,
+  "notes": "Started 2026-10-12 17:25, status written 2026-10-13 06:38. dirty=true reflects the in-progress bot work in the tree at capture time, not experiment churn. Frame corpora (frames/, auto_frames/, walk_frames/, tut_frames/) are gitignored per TEST_HYGIENE R4 -- they are regenerable captures, not evidence. The numbers below are the evidence."
+}

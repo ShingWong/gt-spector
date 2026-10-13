@@ -18,3 +18,13 @@ dist/
 .DS_Store
 Thumbs.db
 gt_spector/winmouse.exe
+
+# experiment frame dumps (reproducible from SHM; keep scripts, not pixels)
+experiments/*/frames/
+experiments/*/auto_frames/
+experiments/*/walk_frames/
+experiments/*/tut_frames/
+
+# Experiment captures: regenerable, not evidence (TEST_HYGIENE R4)
+experiments/*/*.png
+experiments/*/survey.jsonl
