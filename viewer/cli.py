@@ -1,8 +1,9 @@
 import cmd
 import io
 import shlex
+from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from PIL import Image
 
@@ -171,6 +172,48 @@ IN_GAME_SETTINGS = {
         "set": set_background_music,
     },
 }
+
+DEFAULT_IN_GAME_SETTINGS = (
+    "graphics-quality=low,frame-rate=low,sound-effects=off,background-music=off"
+)
+
+
+def apply_in_game_settings(
+    session: Any, settings_str: str, gw: Any, navigator: Any
+) -> str | None:
+    """Reach system_settings and apply each `k=v` in-game setting.
+
+    Returns None on success, or a description of the first failure (used as a
+    status/progress message). Settings that are already at the target value are
+    no-ops (the setters read current state first).
+    """
+    if (
+        gw.identify(session) != "system_settings"
+        and navigator.goto("system_settings") != "system_settings"
+    ):
+        return "could not reach system_settings"
+    for part in settings_str.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "=" not in part:
+            return f"expected key=value, got '{part}'"
+        k, v = part.split("=", 1)
+        k, v = k.strip(), v.strip()
+        entry = IN_GAME_SETTINGS.get(k)
+        if entry is None:
+            valid = ", ".join(sorted(IN_GAME_SETTINGS))
+            return f"unknown setting '{k}'; valid: {valid}"
+        entry = cast(dict[str, Any], entry)
+        values = cast(set[str], entry["values"])
+        if v not in values:
+            valid = ", ".join(sorted(values))
+            return f"{k}: invalid value '{v}'; valid: {valid}"
+        setter = cast(Callable[[Any, str], str], entry["set"])
+        result = setter(session, v)
+        if result != v:
+            return f"{k}: failed to set {v} (result {result})"
+    return None
 
 
 class CliSession(cmd.Cmd):

@@ -833,14 +833,56 @@ def test_provision_n_sequential_and_stops_on_failure(tmp_path, monkeypatch):
         ("bot01", "a@x"), ("bot02", "b@x"), ("bot03", "c@x"), ("bot04", "d@x")]
     c._login_password = lambda email: "pw"
     c._boot_and_login = lambda bot, email, password: "shelter_view"
+    c._provision_session = lambda bot: (None, None, None)
+    c._apply_default_settings = lambda bot, gw, locator, session: None
     c._manager = type("M", (), {
         "get": lambda self, n: type("B", (), {"name": n})(),
+        "reload_from_prefixes": lambda self: None,
         "start_game": lambda self, b: None,
     })()
     c._provision_n(4)
     # bot01, bot02 provisioned; bot03 failed -> stops, bot04 never run
     assert [x[x.index("init") + 1] for x in calls] == ["bot01", "bot02", "bot03"]
     assert statuses[-1] == "bot03: FAILED ()"
+
+
+def test_provision_n_reloads_prefixes_before_lookup(tmp_path, monkeypatch):
+    """After provision init creates the prefix dir, the worker must re-scan
+    the manager so the new bot is found (otherwise "FAILED (no bot)")."""
+    _sync_threads(monkeypatch)
+    c = make_console()
+    reloaded = []
+
+    def fake_run(cmd, **kw):
+        return type("R", (), {"returncode": 0, "stderr": "", "stdout": ""})()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    c._provision_status = type("L", (), {
+        "config": lambda s, text=None: None,
+        "pack": lambda *a, **k: None,
+        "pack_forget": lambda *a, **k: None,
+    })()
+    c._refresh_bots = lambda: None
+    c._tk = _tk_stub()
+    c._unprovisioned_accounts = lambda: [("bot01", "a@x")]
+    c._login_password = lambda email: "pw"
+    c._boot_and_login = lambda bot, email, password: "shelter_view"
+
+    class FakeManager:
+        def get(self, name):
+            return None  # not in the startup scan -> triggers reload
+
+        def reload_from_prefixes(self):
+            reloaded.append(1)
+            # now the bot exists
+            self.get = lambda name: type("B", (), {"name": name})()
+
+        def start_game(self, bot):
+            return None
+
+    c._manager = FakeManager()
+    c._provision_n(1)
+    assert reloaded == [1]
 
 
 def test_load_accounts_line_order(tmp_path, monkeypatch):
@@ -892,8 +934,11 @@ def test_provision_n_slices_to_count(tmp_path, monkeypatch):
         ("bot01", "a@x"), ("bot02", "b@x"), ("bot03", "c@x")]
     c._login_password = lambda email: "pw"
     c._boot_and_login = lambda bot, email, password: "shelter_view"
+    c._provision_session = lambda bot: (None, None, None)
+    c._apply_default_settings = lambda bot, gw, locator, session: None
     c._manager = type("M", (), {
         "get": lambda self, n: type("B", (), {"name": n})(),
+        "reload_from_prefixes": lambda self: None,
         "start_game": lambda self, b: None,
     })()
     c._provision_n(2)
@@ -921,12 +966,17 @@ def test_provision_n_success_refreshes_then_reports(tmp_path, monkeypatch):
     c._unprovisioned_accounts = lambda: [("bot01", "a@x")]
     c._login_password = lambda email: "pw"
     c._boot_and_login = lambda bot, email, password: "shelter_view"
+    c._provision_session = lambda bot: (None, None, None)
+    c._apply_default_settings = lambda bot, gw, locator, session: None
     c._manager = type("M", (), {
         "get": lambda self, n: type("B", (), {"name": n})(),
+        "reload_from_prefixes": lambda self: None,
         "start_game": lambda self, b: None,
     })()
     c._provision_n(1)
-    assert refreshed == [True]
+    # Refresh happens once as the bot's prefix appears (list shows it during
+    # provisioning) and once at the end (final refresh).
+    assert refreshed == [True, True]
     assert statuses[-1] == "Provisioned 1 bot(s)"
 
 
@@ -951,6 +1001,7 @@ def test_provision_n_failure_tail_falls_back_to_stdout(tmp_path, monkeypatch):
     c._boot_and_login = lambda bot, email, password: "shelter_view"
     c._manager = type("M", (), {
         "get": lambda self, n: type("B", (), {"name": n})(),
+        "reload_from_prefixes": lambda self: None,
         "start_game": lambda self, b: None,
     })()
     c._provision_n(1)
@@ -978,6 +1029,7 @@ def test_provision_n_handles_subprocess_error(tmp_path, monkeypatch):
     c._boot_and_login = lambda bot, email, password: "shelter_view"
     c._manager = type("M", (), {
         "get": lambda self, n: type("B", (), {"name": n})(),
+        "reload_from_prefixes": lambda self: None,
         "start_game": lambda self, b: None,
     })()
     c._provision_n(1)
@@ -1011,6 +1063,7 @@ def test_provision_n_reports_start_login_exception(tmp_path, monkeypatch):
     c._boot_and_login = boom
     c._manager = type("M", (), {
         "get": lambda self, n: type("B", (), {"name": n})(),
+        "reload_from_prefixes": lambda self: None,
         "start_game": lambda self, b: None,
     })()
     c._provision_n(1)  # must not raise: the exception is caught and reported
@@ -1134,8 +1187,11 @@ def test_provision_n_uses_sys_executable(monkeypatch):
     c._unprovisioned_accounts = lambda: [("bot09", "a@x")]
     c._login_password = lambda email: "pw"
     c._boot_and_login = lambda bot, email, password: "shelter_view"
+    c._provision_session = lambda bot: (None, None, None)
+    c._apply_default_settings = lambda bot, gw, locator, session: None
     c._manager = type("M", (), {
         "get": lambda self, n: type("B", (), {"name": n})(),
+        "reload_from_prefixes": lambda self: None,
         "start_game": lambda self, b: None,
     })()
     c._refresh_bots = lambda: None
@@ -1167,10 +1223,13 @@ def test_provision_n_starts_and_logs_in_after_init(monkeypatch):
     bot_obj = type("B", (), {"name": "bot09", "display": 18})()
     c._manager = type("M", (), {
         "get": lambda self, n: bot_obj,
+        "reload_from_prefixes": lambda self: None,
         "start_game": lambda self, b: calls.append(("start", b.name)),
     })()
     c._boot_and_login = lambda bot, email, password: (
         calls.append(("login", bot.name, email, password)) or "shelter_view")
+    c._provision_session = lambda bot: (None, None, None)
+    c._apply_default_settings = lambda bot, gw, locator, session: None
     c._refresh_bots = lambda: None
     c._provision_status = type("L", (), {
         "config": lambda s, text=None: None,
@@ -1218,15 +1277,85 @@ def test_provision_n_updates_dedicated_label_not_footer(monkeypatch):
     c._login_password = lambda email: "pw"
     c._manager = type("M", (), {
         "get": lambda self, n: type("B", (), {"name": "bot10", "display": 19, "prefix": "/p"})(),
+        "reload_from_prefixes": lambda self: None,
         "start_game": lambda self, b: None,
     })()
     c._boot_and_login = lambda bot, email, password: "shelter_view"
+    c._provision_session = lambda bot: (None, None, None)
+    c._apply_default_settings = lambda bot, gw, locator, session: None
     c._refresh_bots = lambda: None
 
     c._provision_n(1)
     time.sleep(0.1)
     assert any("Provisioning bot10" in t for t in label_updates), label_updates
     assert "Provisioning bot10" not in "".join(footer_updates), footer_updates
+
+
+def test_provision_n_applies_default_settings_after_login(tmp_path, monkeypatch):
+    """After a successful login the provision worker must reach system_settings
+    and apply the default in-game options (graphics/sound)."""
+    _sync_threads(monkeypatch)
+    c = make_console()
+    statuses = []
+    applied = []
+
+    def fake_run(cmd, **kw):
+        return type("R", (), {"returncode": 0, "stderr": "", "stdout": ""})()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    c._provision_status = type("L", (), {
+        "config": lambda s, text=None: statuses.append(text),
+        "pack": lambda *a, **k: None,
+        "pack_forget": lambda *a, **k: None,
+    })()
+    c._refresh_bots = lambda: None
+    c._tk = _tk_stub()
+    c._unprovisioned_accounts = lambda: [("bot01", "a@x")]
+    c._login_password = lambda email: "pw"
+    c._boot_and_login = lambda bot, email, password: "shelter_view"
+    c._provision_session = lambda bot: ("session", "gw", "locator")
+    c._apply_default_settings = lambda bot, gw, locator, session: applied.append(
+        (gw, locator, session)) or None
+    c._manager = type("M", (), {
+        "get": lambda self, n: type("B", (), {"name": n})(),
+        "reload_from_prefixes": lambda self: None,
+        "start_game": lambda self, b: None,
+    })()
+    c._provision_n(1)
+    assert applied == [("gw", "locator", "session")]
+    assert any("logged in, applying settings" in t for t in statuses)
+    assert statuses[-1] == "Provisioned 1 bot(s)"
+
+
+def test_provision_n_settings_failure_is_reported(tmp_path, monkeypatch):
+    """If applying settings fails, the worker reports it and stops."""
+    _sync_threads(monkeypatch)
+    c = make_console()
+    statuses = []
+
+    def fake_run(cmd, **kw):
+        return type("R", (), {"returncode": 0, "stderr": "", "stdout": ""})()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    c._provision_status = type("L", (), {
+        "config": lambda s, text=None: statuses.append(text),
+        "pack": lambda *a, **k: None,
+        "pack_forget": lambda *a, **k: None,
+    })()
+    c._refresh_bots = lambda: None
+    c._tk = _tk_stub()
+    c._unprovisioned_accounts = lambda: [("bot01", "a@x")]
+    c._login_password = lambda email: "pw"
+    c._boot_and_login = lambda bot, email, password: "shelter_view"
+    c._provision_session = lambda bot: (None, None, None)
+    c._apply_default_settings = lambda bot, gw, locator, session: "could not reach system_settings"
+    c._manager = type("M", (), {
+        "get": lambda self, n: type("B", (), {"name": n})(),
+        "reload_from_prefixes": lambda self: None,
+        "start_game": lambda self, b: None,
+    })()
+    c._provision_n(1)
+    assert statuses[-1] == "bot01: settings failed (could not reach system_settings)"
 
 
 def test_loc_label_alliance_help_when_help_runner_active():

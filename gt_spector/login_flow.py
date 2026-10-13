@@ -178,21 +178,74 @@ class LoginStateMachine:
     def _in_game(self) -> bool:
         return any(self._locate(t) is not None for t in IN_GAME_TEMPLATES)
 
+    def _reattach(self) -> None:
+        """Reconnect the SHM readback after the game restarts its browser.
+
+        Clicking OK on the expired-login dialog reinitializes the embedded
+        browser, which tears down and recreates the DXVK offscreen swapchain.
+        The old ShmScreen keeps a stale mmap/counter, so refresh() returns the
+        dead pre-restart frame forever. Re-attaching (fresh ShmScreen + Input)
+        re-opens the shm file and sees the real next screen (game_login).
+        """
+        time.sleep(3)
+        self._session.attach(
+            self._display,
+            source=f"shm://{self._display.lstrip(':')}",
+        )
+
+    def _locate_poll(self, name: str, timeout: float = _EYE_POLL_TIMEOUT) -> Any | None:
+        """Locate `name`, polling until it renders or the timeout elapses.
+
+        Pages render asynchronously (the IGG account button, the browser form),
+        so a one-shot locate misses elements that are still loading. Mirrors
+        _find_eye's condition-based wait.
+        """
+        deadline = time.monotonic() + timeout
+        while True:
+            r = self._locate(name)
+            if r is not None:
+                return r
+            if time.monotonic() >= deadline:
+                return None
+            time.sleep(_EYE_POLL_INTERVAL)
+
     def _detect_state(self) -> str:
         if self._in_game():
             return "in_game"
-        for name in ("igg_login_exit_static", "game_login_last_login_static",
+        # glory_league_event is fingerprint-only (no templates), so it must be
+        # detected via identify() before the template checks below.
+        if self._gw.identify(self._session) == "glory_league_event":
+            return "glory_league_event"
+        for name in ("login_current_static", "igg_login_exit_static",
+                     "game_login_last_login_static",
                      "start_expire_ok_static", "start_expire_more_static",
                      "another_login_disconnect_detect_static"):
             if self._locate(name):
                 return name
         return "unknown"
 
-    def run(self, email: str, password: str) -> str:
+    def run(self, email: str, password: str, force_account: bool = False) -> str:
         for _ in range(20):
             state = self._detect_state()
             if state == "in_game":
-                return self._gw.identify(self._session) or "in_game"
+                if not force_account:
+                    return self._gw.identify(self._session) or "in_game"
+                # force_account: the auto-logged-in session is not trusted
+                # (it may be the master account). Re-login the intended
+                # account through the browser.
+                from gt_spector.navigator import Navigator
+                nav = Navigator(self._gw, self._locator, self._session)
+                if nav.goto("change_account") != "change_account":
+                    return "error"
+                _wait(self._session)
+                self._session.click(735, 262)  # IGG account button
+                _wait(self._session, 6)
+                return login(
+                    email, password,
+                    self._session, self._gw, self._locator,
+                    self._prefix, self._display,
+                    confirm=self._confirm,
+                )
             if not self._confirm(state):
                 return "cancelled"
 
@@ -201,13 +254,35 @@ class LoginStateMachine:
                 if r is None:
                     return "error"
                 self._session.click(r.cx, r.cy)
+                # Dismissing the expired dialog restarts the embedded browser,
+                # which detaches the DXVK SHM readback. Reconnect before the
+                # next detect, or we read the dead pre-restart frame and the
+                # flow never sees the real game_login page.
+                self._reattach()
             elif state == "another_login_disconnect_detect_static":
                 # Another device is logged in with this ID. ESC dismisses the
                 # popup to the game login page; the loop re-detects and runs
                 # the login module.
                 self._session.key_press("Escape")
+            elif state == "glory_league_event":
+                # Glory League splash after login; click GO to continue to the
+                # browser login page (current-account prompt). The GO button is
+                # a fixed yaml location (no locator template), so use gw.loc().
+                pos = self._gw.loc("glory_league_event", "glory_league_go")
+                if pos is None:
+                    return "error"
+                self._session.click(*pos)
+            elif state == "login_current_static":
+                # A previous session is remembered ("currently logged in");
+                # click Use-another-account to reach the real login form.
+                r = self._locate_poll("login_use_another_static")
+                if r is None:
+                    return "error"
+                self._session.click(r.cx, r.cy)
             elif state == "game_login_last_login_static":
-                r = self._locate("game_login_igg_account")
+                # The IGG account button renders after the last-login text;
+                # poll until it appears, then click to open the browser.
+                r = self._locate_poll("game_login_igg_account")
                 if r is None:
                     return "error"
                 self._session.click(r.cx, r.cy)
@@ -236,11 +311,16 @@ def expired_login(
     prefix: str,
     display: str,
     confirm: Callable[[str], bool] | None = None,
+    force_account: bool = False,
 ) -> str:
-    """Complete login from the expired-session / unlinked-account entry."""
+    """Complete login from the expired-session / unlinked-account entry.
+
+    When `force_account` is set (provisioning), an auto-logged-in session is
+    not trusted — the intended account is always logged in via the browser.
+    """
     return LoginStateMachine(
         session, gw, locator, prefix, display, confirm=confirm,
-    ).run(email, password)
+    ).run(email, password, force_account=force_account)
 
 
 class LoginFlow:

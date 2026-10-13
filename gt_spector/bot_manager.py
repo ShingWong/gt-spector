@@ -34,10 +34,21 @@ class Bot:
 
     @property
     def game_dir(self) -> str:
-        return os.path.join(
+        base = os.path.join(
             self.prefix, "drive_c", "Program Files",
-            "DoomsdayLastSurvivors", "Doomsday_1.59.0"
+            "DoomsdayLastSurvivors"
         )
+        # Prefer the newest installed version dir, fall back to 1.59.0.
+        try:
+            versions = sorted(
+                d for d in os.listdir(base)
+                if d.startswith("Doomsday_") and os.path.isdir(os.path.join(base, d))
+            )
+            if versions:
+                return os.path.join(base, versions[-1])
+        except OSError:
+            pass
+        return os.path.join(base, "Doomsday_1.59.0")
 
     @property
     def log_path(self) -> str:
@@ -64,6 +75,15 @@ class BotManager:
             if b.name == name:
                 return b
         return None
+
+    def reload_from_prefixes(self) -> None:
+        """Drop all tracked bots and re-scan the prefixes directory.
+
+        Used after provisioning a new prefix (which creates a directory the
+        startup scan did not see), so the new bot can be found by name.
+        """
+        self.bots = []
+        self.load_from_prefixes()
 
     def load_from_prefixes(self) -> None:
         if not os.path.exists(BASE_DIR):

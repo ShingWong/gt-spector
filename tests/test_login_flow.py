@@ -12,7 +12,10 @@ def test_in_game_templates_exist_in_store():
 class FakeGW:
     def __init__(self):
         self.screens = {}
-        self.navigation = {"settings": {"change_account": {"action": "click"}}}
+        self.navigation = {
+            "settings": {"change_account": {"action": "click"}},
+            "shelter_view": {"change_account": {"action": "locate", "name": "x"}},
+        }
         self._locator = None
         self._screen = "settings"
     def identify(self, session):
@@ -22,12 +25,15 @@ class FakeGW:
     def _resolve_hop(self, session, screen, target):
         self._screen = target
         return True
+    def loc(self, screen, name):
+        return (575, 654) if name == "glory_league_go" else None
 
 
 class FakeSession:
     def __init__(self):
         self.clicks = []
         self.display = ":13"
+        self.attaches = []
         import numpy as np
         self.frame = np.zeros((50, 50, 3), dtype=np.uint8)
     def refresh(self):
@@ -38,6 +44,8 @@ class FakeSession:
         self.clicks.append((x, y))
     def key_press(self, key):
         self.clicks.append((key,))
+    def attach(self, display, source=""):
+        self.attaches.append((display, source))
 
 
 class FakeLoc:
@@ -148,6 +156,117 @@ def test_state_machine_reaches_browser_login(monkeypatch):
     assert "igg_login_exit_static" in seen
 
 
+def test_state_machine_reattaches_after_expired_ok(monkeypatch):
+    """Dismissing the expired dialog restarts the browser (SHM detach); the
+    state machine must reattach the session before reading the next screen."""
+    import gt_spector.typing as T
+    from gt_spector import login_flow as L
+    monkeypatch.setattr(T, "type_text", lambda *a, **k: True)
+    monkeypatch.setattr(L.time, "sleep", lambda *a, **k: None)
+
+    s = FakeSession()
+    gw = FakeGW()
+    sm = LoginStateMachine(s, gw, FakeLoc(), "/p", ":13", confirm=lambda m: True)
+    seq = ["start_expire_ok_static", "game_login_last_login_static",
+           "igg_login_exit_static"]
+    idx = {"i": 0}
+    def detect():
+        st = seq[min(idx["i"], len(seq) - 1)]
+        idx["i"] += 1
+        return st
+    sm._detect_state = detect
+    sm._locator = FakeLoc(found=("start_expire_ok_static", "game_login_igg_account"))
+    result = sm.run("a@b.c", "pw")
+    assert result == "settings"
+    # The OK click must be followed by a reattach to the same display.
+    assert s.attaches == [(":13", "shm://13")]
+
+
+def test_state_machine_use_another_account_before_login(monkeypatch):
+    """A remembered session shows the 'currently logged in' page; the flow
+    must click Use-another-account before reaching the login form."""
+    import gt_spector.typing as T
+    from gt_spector import login_flow as L
+    monkeypatch.setattr(T, "type_text", lambda *a, **k: True)
+    monkeypatch.setattr(L.time, "sleep", lambda *a, **k: None)
+
+    s = FakeSession()
+    gw = FakeGW()
+    sm = LoginStateMachine(s, gw, FakeLoc(), "/p", ":13", confirm=lambda m: True)
+    seq = ["login_current_static", "igg_login_exit_static"]
+    idx = {"i": 0}
+    def detect():
+        st = seq[min(idx["i"], len(seq) - 1)]
+        idx["i"] += 1
+        return st
+    sm._detect_state = detect
+
+    class UseAnotherLoc(FakeLoc):
+        def find(self, frame, name):
+            r = super().find(frame, name)
+            if name == "login_use_another_static":
+                return type("R", (), {"found": r.found, "cx": 518, "cy": 369})()
+            return r
+
+    sm._locator = UseAnotherLoc(found=("login_current_static", "login_use_another_static"))
+    result = sm.run("a@b.c", "pw")
+    assert result == "settings"
+    # The Use-another-account button (518,369) must be clicked before login.
+    assert (518, 369) in s.clicks
+
+
+def test_state_machine_polls_game_login_igg_button(monkeypatch):
+    """The IGG account button on game_login renders late; _locate_poll must
+    retry until it appears instead of erroring on the first frame."""
+    import gt_spector.typing as T
+    from gt_spector import login_flow as L
+    monkeypatch.setattr(T, "type_text", lambda *a, **k: True)
+    monkeypatch.setattr(L.time, "sleep", lambda *a, **k: None)
+
+    s = FakeSession()
+    gw = FakeGW()
+    sm = LoginStateMachine(s, gw, FakeLoc(), "/p", ":13", confirm=lambda m: True)
+    # Button missing on the first locate, present on the second.
+    calls = {"n": 0}
+    def flaky(self, frame, name):
+        if name == "game_login_igg_account":
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return type("R", (), {"found": False, "cx": 0, "cy": 0})()
+            return type("R", (), {"found": True, "cx": 635, "cy": 585})()
+        found = name in ("igg_login_eye2_static", "login_eye_static")
+        return type("R", (), {"found": found, "cx": 880, "cy": 226})()
+    sm._locator = type("FL", (), {"find": flaky})()
+    r = sm._locate_poll("game_login_igg_account", timeout=0.5)
+    assert r is not None and r.cx == 635
+    assert calls["n"] >= 2
+
+
+def test_state_machine_clicks_glory_league_go(monkeypatch):
+    """After OK+reattach the game may land on the Glory League splash; the
+    flow must click GO (575,654) to reach the browser current-account page."""
+    import gt_spector.typing as T
+    from gt_spector import login_flow as L
+    monkeypatch.setattr(T, "type_text", lambda *a, **k: True)
+    monkeypatch.setattr(L.time, "sleep", lambda *a, **k: None)
+
+    s = FakeSession()
+    gw = FakeGW()
+    sm = LoginStateMachine(s, gw, FakeLoc(), "/p", ":13", confirm=lambda m: True)
+    seq = ["glory_league_event", "login_current_static", "igg_login_exit_static"]
+    idx = {"i": 0}
+    def detect():
+        st = seq[min(idx["i"], len(seq) - 1)]
+        idx["i"] += 1
+        return st
+    sm._detect_state = detect
+    sm._locator = FakeLoc(found=("login_current_static", "login_use_another_static"))
+    result = sm.run("a@b.c", "pw")
+    assert result == "settings"
+    # GO button (575,654) must be clicked to leave the splash.
+    assert (575, 654) in s.clicks
+
+
 def test_state_machine_reaches_in_game(monkeypatch):
     from gt_spector import login_flow as L
     monkeypatch.setattr(L.time, "sleep", lambda *a, **k: None)
@@ -156,6 +275,39 @@ def test_state_machine_reaches_in_game(monkeypatch):
     sm = LoginStateMachine(s, gw, FakeLoc(found=("region_static",)), "/p", ":13")
     result = sm.run("a@b.c", "pw")
     assert result == "settings"
+
+
+def test_state_machine_force_account_relogs_from_in_game(monkeypatch):
+    """With force_account, reaching in_game (an auto-logged-in session, possibly
+    the master account) must NOT be accepted — the flow re-logs-in the intended
+    account via the browser."""
+    import gt_spector.typing as T
+    from gt_spector import login_flow as L
+    monkeypatch.setattr(T, "type_text", lambda *a, **k: True)
+    monkeypatch.setattr(L.time, "sleep", lambda *a, **k: None)
+
+    s = FakeSession()
+    gw = FakeGW()
+
+    # FakeGW.identify returns "in_game" (via region_static) then "change_account"
+    # after nav.goto; navigate through to the browser login form.
+    class RelogGW(FakeGW):
+        def __init__(self):
+            super().__init__()
+            self._screen = "shelter_view"
+        def identify(self, session):
+            return self._screen
+        def _resolve_hop(self, session, screen, target):
+            self._screen = target
+            return True
+
+    gw = RelogGW()
+    sm = LoginStateMachine(s, gw, FakeLoc(found=("region_static",)), "/p", ":13",
+                           confirm=lambda m: True)
+    sm.run("a@b.c", "pw", force_account=True)
+    # The flow must NOT accept the auto-logged-in session; it re-logs-in via
+    # the browser, so the IGG account button must be clicked.
+    assert (735, 262) in s.clicks
 
 
 def test_state_machine_esc_and_login_after_another_login_disconnect(monkeypatch):

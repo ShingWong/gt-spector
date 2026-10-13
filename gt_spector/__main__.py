@@ -1,46 +1,15 @@
 import argparse
 import sys
-from collections.abc import Callable
-from typing import Any, cast
+from typing import Any
 
 
 def apply_in_game_settings(session: Any, settings_str: str, gw: Any, navigator: Any) -> int:
     from viewer import cli as cli_mod
 
-    if (
-        gw.identify(session) != "system_settings"
-        and navigator.goto("system_settings") != "system_settings"
-    ):
-        print("error: could not reach system_settings", file=sys.stderr)
+    failure = cli_mod.apply_in_game_settings(session, settings_str, gw, navigator)
+    if failure is not None:
+        print(f"error: {failure}", file=sys.stderr)
         return 1
-    pairs: dict[str, str] = {}
-    for part in settings_str.split(","):
-        part = part.strip()
-        if not part:
-            continue
-        if "=" not in part:
-            print(f"error: expected key=value, got '{part}'", file=sys.stderr)
-            return 1
-        k, v = part.split("=", 1)
-        pairs[k.strip()] = v.strip()
-    unknown = [k for k in pairs if k not in cli_mod.IN_GAME_SETTINGS]
-    if unknown:
-        valid = ", ".join(sorted(cli_mod.IN_GAME_SETTINGS))
-        print(f"error: unknown setting(s) {unknown}; valid: {valid}", file=sys.stderr)
-        return 1
-    for k, v in pairs.items():
-        entry = cli_mod.IN_GAME_SETTINGS[k]
-        values = cast(set[str], entry["values"])
-        if v not in values:
-            valid = ", ".join(sorted(values))
-            print(f"error: {k}: invalid value '{v}'; valid: {valid}", file=sys.stderr)
-            return 1
-        setter = cast(Callable[[Any, str], str], entry["set"])
-        result = setter(session, v)
-        if result != v:
-            print(f"{k}: failed to set {v} (result {result})", file=sys.stderr)
-            return 1
-        print(f"{k}={result}")
     return 0
 
 

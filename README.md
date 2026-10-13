@@ -53,6 +53,15 @@ gt-spector/
     superpowers/specs/ ← design docs
 ```
 
+## Screen library + tutorial guard (2026-10)
+
+Automated screen-definition pipeline (EG2 embeddings :8091, Qwen-27B+mmproj
+:8080). Experiments + scripts: `experiments/eg2-screen-lib/`. Detail:
+`docs/eg2-screen-lib.md`. Proposal modules (`*_PROPOSAL.py`, merge pending):
+tutorial guard (fixed-patch → contour+EG2 crop-naming → Qwen), two-path
+tutorial follower, nav wiring. Observed edges / `new_screens.yaml` overlay
+live in the experiments dir until merged into `game_world.yaml`.
+
 ## Status
 
 - [ ] dls_bot_lib — agent API (file-backed first)

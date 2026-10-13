@@ -191,6 +191,89 @@ def _copy_master_appdata(dest: str) -> None:
     if os.path.exists(reg_src):
         shutil.copy2(reg_src, os.path.join(dest, "user.reg"))
         print("Copied master appdata (asset cache + tutorial-complete registry)")
+    _clear_master_session(os.path.join(dest, "user.reg"))
+    _clear_master_cookies(appdata)
+
+
+# Registry keys that hold the master account's saved login session. The master
+# appdata ships a valid session (gpcid 2156987937) so the game auto-logs-in the
+# WRONG account on a fresh prefix. Removing them makes the game boot to the
+# browser login form for the bot's own account. Kept: tutorial-complete state
+# (LoginState per-account, agreements) which should survive.
+_SESSION_REG_PATTERNS = (
+    "_PRE_LOGIN_TYPE__",
+    "gpc.sdk.account.gpcid.on.first.logined_",
+    "gpc.sdk.account.gpcid_",
+    "gpc.sdk.account.last.refresh.session.timestamp_",
+    "gpc.sdk.account.login.type.on.first.logined_",
+    "gpc.sdk.account.login.type_",
+    "gpc.sdk.account.ssotoken.time.to.create_",
+    "gpc.sdk.account.ssotoken.time.to.verify_",
+    "gpc.sdk.account.third.platform.id_",
+    "gpc.sdk.account.time.to.verify_",
+    "gpc.sdk.device.bind.userid.state_",
+    "gpc.sdk.last_login.userid_",
+    "gpc.sdk.payment.is.not.first.send.device.info_",
+    "gpc.sdk.udid_",
+    "PreLoginUserId_",
+)
+
+
+def _clear_master_session(reg_path: str) -> None:
+    """Strip the master account's saved-session keys from a copied user.reg.
+
+    Without this, a fresh prefix auto-logs-in the master account (whose valid
+    session ships in the master appdata) and the provision flow reports success
+    for the wrong account. Removing the session keys forces the game to show
+    the browser login form so the correct account is used.
+    """
+    if not os.path.exists(reg_path):
+        return
+    with open(reg_path) as f:
+        lines = f.read().splitlines()
+    out: list[str] = []
+    removed = 0
+    for line in lines:
+        if any(p in line for p in _SESSION_REG_PATTERNS):
+            removed += 1
+            continue
+        out.append(line)
+    if removed:
+        with open(reg_path, "w") as f:
+            f.write("\n".join(out) + "\n")
+        print(f"Cleared {removed} master-session registry keys")
+
+
+def _clear_master_cookies(appdata: str) -> None:
+    """Remove the master account's browser SSO session from the appdata.
+
+    The embedded browser persists its IGG login in several places that ship
+    with the master appdata: the CEF Cookies file (`accounts.igg.com_account_sso_token`),
+    the Local Storage leveldb (holds the logged-in account email), Session
+    Storage, and the device identity caches (`udid_cache`/`guestid_cache`) that
+    the server uses to restore the master login on a known device. Copying
+    these lets the game auto-login the master account no matter what user.reg
+    says. Deleting them forces the browser login form on the first boot of a
+    new prefix.
+    """
+    import shutil as _shutil
+
+    targets = [
+        os.path.join(appdata, name)
+        for name in ("Cookies", "Cookies-journal", "Local Storage",
+                     "Session Storage", "udid_cache", "guestid_cache")
+    ]
+    for path in targets:
+        if not os.path.exists(path):
+            continue
+        try:
+            if os.path.isdir(path):
+                _shutil.rmtree(path)
+            else:
+                os.remove(path)
+            print(f"Cleared {os.path.basename(path)} (master SSO session)")
+        except OSError as e:
+            print(f"WARNING: could not clear {path}: {e}")
 
 
 def _install_fonts(dest: str) -> None:

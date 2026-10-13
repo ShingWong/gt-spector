@@ -172,8 +172,8 @@ locations:
   start_expire_ok_static: {x: 576, y: 561, screens: [startup_expired]}
   start_expire_more_static: {x: 651, y: 602, screens: [startup_login]}
   start_norah_static:  {x: 507, y: 657, screens: [start_norah]}
-  login_current_static: {x: 323, y: 125, screens: [igg_login]}
-  login_use_another_static: {x: 518, y: 369, screens: [igg_login]}
+  login_current_static: {x: 323, y: 125, screens: [igg_login_current]}
+  login_use_another_static: {x: 518, y: 369, screens: [igg_login_current]}
   igg_login_exit_static: {x: 1050, y: 17, screens: [igg_login]}
   login_enter_email_static: {x: 365, y: 156, screens: [igg_login]}
   login_enter_password: {x: 365, y: 226, screens: [igg_login]}
@@ -308,6 +308,13 @@ screens:
       Identified by the browser's X (exit) button plus the email placeholder;
       clicking X returns to the game account page.
     templates: [igg_login_exit_static, login_enter_email_static]
+  igg_login_current:
+    description: IGG browser page shown when a previous session exists —
+      the "currently logged in" banner with a Use-another-account button.
+      Must be detected before igg_login_success (it shares the browser X and
+      OK/continue templates); its distinctive anchor is the current-account
+      banner text. Clicking Use-another-account opens the real login form.
+    templates: [igg_login_exit_static, login_current_static]
   igg_login_success:
     description: IGG login success page (logged-in banner). Identified by the
       browser's X plus the success text; Continue leads to the ID select page.
@@ -365,6 +372,8 @@ navigation:
   igg_login:
     select_igg_id:      {action: locate, name: login_login_static}
     account:            {action: locate, name: igg_login_exit_static}
+  igg_login_current:
+    igg_login:          {action: click, location: login_use_another_static}
   igg_login_success:
     select_igg_id:      {action: click, location: login_continue}
   igg_id_confirm:

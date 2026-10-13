@@ -171,16 +171,9 @@ class BotConsole:
 
     def _boot_and_login(self, bot, email: str, password: str) -> str:
         """Wait for boot, then log the bot in. Returns final screen."""
-        from gt_spector.game_world import GameWorld
-        from gt_spector.locator import Locator
-        from gt_spector.session import Session
-
-        gw = GameWorld()
-        locator = Locator()
-        gw.set_locator(locator)
+        session, gw, locator = self._provision_session(bot)
 
         import time as _t
-        session = Session(f":{bot.display}", source=f"shm://{bot.display}")
         boot_deadline = _t.monotonic() + 120
         screen = None
         while _t.monotonic() < boot_deadline:
@@ -198,6 +191,35 @@ class BotConsole:
         return login_flow.expired_login(
             email, password, session, gw, locator,
             bot.prefix, f":{bot.display}",
+            force_account=True,
+        )
+
+    def _provision_session(self, bot: Any) -> tuple[Any, Any, Any]:
+        """Create the game-world objects bound to a bot's display."""
+        from gt_spector.game_world import GameWorld
+        from gt_spector.locator import Locator
+        from gt_spector.session import Session
+
+        gw = GameWorld()
+        locator = Locator()
+        gw.set_locator(locator)
+        session = Session(f":{bot.display}", source=f"shm://{bot.display}")
+        return session, gw, locator
+
+    def _apply_default_settings(self, bot: Any, gw: Any, locator: Any,
+                                session: Any) -> str | None:
+        """Navigate to system_settings and apply the default in-game options.
+
+        Returns None on success, or a failure description. Called once after a
+        fresh provision+login so each bot gets the same low graphics / silent
+        audio profile the rest of the farm runs with.
+        """
+        from gt_spector.navigator import Navigator
+        from viewer import cli as cli_mod
+
+        nav = Navigator(gw, locator, session)
+        return cli_mod.apply_in_game_settings(
+            session, cli_mod.DEFAULT_IN_GAME_SETTINGS, gw, nav,
         )
 
     def _provision_n(self, count: int) -> None:
@@ -232,6 +254,11 @@ class BotConsole:
                         _set_status(f"{name}: FAILED ({tail})")
                         return
                     _set_status(f"{name}: provisioned, starting...")
+                    # The prefix directory only exists now; the startup scan
+                    # does not know it, so re-scan before looking it up.
+                    self._manager.reload_from_prefixes()
+                    # Show the new bot in the list immediately.
+                    self._tk.after(0, self._refresh_bots)
                     bot = self._manager.get(name)
                     if bot is None:
                         _set_status(f"{name}: FAILED (no bot)")
@@ -243,11 +270,20 @@ class BotConsole:
                     except Exception as e:  # noqa: BLE001 - report, don't die silently
                         _set_status(f"{name}: FAILED ({e})")
                         return
-                    if result in ("in_game", "shelter_view", "world_map",
-                                  "start_norah", "glory_league_event", None):
-                        _set_status(f"{name}: logged in")
-                    else:
+                    if result not in ("in_game", "shelter_view", "world_map",
+                                      "start_norah", "glory_league_event", None):
                         _set_status(f"{name}: login failed ({result})")
+                        return
+                    _set_status(f"{name}: logged in, applying settings...")
+                    try:
+                        session, gw, locator = self._provision_session(bot)
+                        settings_fail = self._apply_default_settings(
+                            bot, gw, locator, session)
+                    except Exception as e:  # noqa: BLE001 - report, don't die silently
+                        _set_status(f"{name}: settings FAILED ({e})")
+                        return
+                    if settings_fail:
+                        _set_status(f"{name}: settings failed ({settings_fail})")
                         return
                 self._tk.after(0, self._refresh_bots)
                 _set_status(f"Provisioned {len(pending)} bot(s)")
@@ -867,7 +903,9 @@ class BotConsole:
             side=tk.LEFT, padx=4, pady=12)
 
     def _refresh_bots(self) -> None:
-        self._manager.load_from_prefixes()
+        # reload (clear + rescan), not load (append): a manual refresh must
+        # reflect removed/provisioned prefixes without duplicating bots.
+        self._manager.reload_from_prefixes()
         self._build_rows()
         self._status.config(text=f"Refreshed: {len(self._manager.bots)} bots")
 

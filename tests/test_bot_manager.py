@@ -40,3 +40,26 @@ def test_stop_game_kills_xvfb(monkeypatch):
     # the xvfb_pid must have been killed
     assert 12345 in killed
     assert bot.xvfb_pid is None
+
+
+def test_reload_from_prefixes_rescans(tmp_path, monkeypatch):
+    from gt_spector.bot_manager import BotManager
+
+    prefixes = tmp_path / "prefixes"
+    (prefixes / "bot01" / "drive_c").mkdir(parents=True)
+    (prefixes / "bot02" / "drive_c").mkdir(parents=True)
+    monkeypatch.setattr("gt_spector.bot_manager.BASE_DIR", str(prefixes))
+
+    m = BotManager()
+    m.load_from_prefixes()
+    assert [b.name for b in m.bots] == ["bot01", "bot02"]
+
+    # A new prefix appears after the startup scan.
+    (prefixes / "bot03" / "drive_c").mkdir(parents=True)
+    assert m.get("bot03") is None
+
+    m.reload_from_prefixes()
+    assert [b.name for b in m.bots] == ["bot01", "bot02", "bot03"]
+    assert m.get("bot03") is not None
+    # reload clears prior entries (no duplicates)
+    assert len(m.bots) == 3

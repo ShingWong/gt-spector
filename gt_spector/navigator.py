@@ -8,6 +8,13 @@ from typing import Any
 MIN_SETTLE = 0.15
 MAX_SETTLE_TRIES = 15
 MAX_ESC = 3
+# Consecutive identical identifications required for _settle to accept a
+# landing screen. Screen transitions animate; identify() can briefly match
+# a wrong screen (e.g. avatar_menu opening flashes a frame that matches
+# world_map via the avatar template). Requiring stability avoids treating a
+# mid-animation frame as the landing screen, which otherwise recomputes the
+# route from a ghost screen and loops (e.g. shelter_view <-> world_map).
+STABLE_TRIES = 2
 
 
 class Navigator:
@@ -53,19 +60,35 @@ class Navigator:
         return path
 
     def _settle(self, source_screen: str) -> str | None:
-        """Wait for the screen to change away from `source_screen`.
+        """Wait for the screen to change away from `source_screen` and hold.
 
         Poll identify() at least every MIN_SETTLE seconds, up to
-        MAX_SETTLE_TRIES times. Returns the new screen, or None if it never
-        changed.
+        MAX_SETTLE_TRIES times. The first poll that returns a screen other
+        than `source_screen` is remembered; it is only accepted once the same
+        screen has been observed for STABLE_TRIES consecutive polls (so a
+        single mid-animation frame that flashes a wrong screen, e.g.
+        avatar_menu -> world_map via the shared avatar template, is not
+        treated as the landing screen). Returns the stable screen, or None if
+        it never settled.
         """
+        candidate: str | None = None
+        candidate_count = 0
         for _ in range(MAX_SETTLE_TRIES):
             time.sleep(MIN_SETTLE)
             self._session.refresh()
             current: str | None = self._gw.identify(self._session)
-            if current is not None and current != source_screen:
-                return current
-        return None
+            if current is None or current == source_screen:
+                candidate = None
+                candidate_count = 0
+                continue
+            if current == candidate:
+                candidate_count += 1
+                if candidate_count >= STABLE_TRIES:
+                    return current
+            else:
+                candidate = current
+                candidate_count = 1
+        return candidate if candidate_count >= STABLE_TRIES else None
 
     def _recover_esc(self) -> str | None:
         """ESC up to MAX_ESC times, re-identifying after each."""

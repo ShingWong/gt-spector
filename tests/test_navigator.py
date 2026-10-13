@@ -75,7 +75,8 @@ def test_settle_waits_until_screen_changes():
     gw = FakeGW({"a": "a", "b": "b"})
     s = FakeSession("a")
     n = _nav(gw, s)
-    # source is "a"; identify will return "a" for the first 3 calls then "b"
+    # source is "a"; identify returns "a" for the first 3 calls then "b"
+    # (which must hold for STABLE_TRIES consecutive polls to be accepted).
     calls = {"n": 0}
     def fake_identify(session):
         calls["n"] += 1
@@ -85,7 +86,19 @@ def test_settle_waits_until_screen_changes():
     gw.identify = fake_identify
     result = n._settle("a")
     assert result == "b"
-    assert calls["n"] == 3
+    assert calls["n"] == 4  # 2 x "a" (reset) + "b" (candidate) + "b" (stable)
+
+
+def test_settle_ignores_single_flash_of_wrong_screen():
+    """A one-frame flash of another screen (e.g. avatar_menu opening briefly
+    matching world_map via the shared avatar template) must not be returned;
+    the stable screen that follows is."""
+    gw = FakeGW({"a": "a", "b": "b", "c": "c"})
+    s = FakeSession("a")
+    n = _nav(gw, s)
+    seq = iter(["b", "c", "c"])
+    gw.identify = lambda session: next(seq)
+    assert n._settle("a") == "c"
 
 
 def test_settle_returns_none_after_max_tries():
